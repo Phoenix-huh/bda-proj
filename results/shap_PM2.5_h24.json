@@ -1,0 +1,94 @@
+{
+  "target": "PM2.5",
+  "horizon": 24,
+  "top_features": [
+    {
+      "feature": "cur_PM2.5",
+      "mean_abs_shap": 22.10978620219498
+    },
+    {
+      "feature": "roll24_PM2.5",
+      "mean_abs_shap": 10.73555576020511
+    },
+    {
+      "feature": "doy_cos",
+      "mean_abs_shap": 7.885941302394067
+    },
+    {
+      "feature": "lag24_PM2.5",
+      "mean_abs_shap": 7.264677415151678
+    },
+    {
+      "feature": "StationId",
+      "mean_abs_shap": 6.821358539061408
+    },
+    {
+      "feature": "Hour",
+      "mean_abs_shap": 4.783670642251307
+    },
+    {
+      "feature": "Month",
+      "mean_abs_shap": 1.624241238450057
+    },
+    {
+      "feature": "doy_sin",
+      "mean_abs_shap": 1.6085456874868835
+    },
+    {
+      "feature": "lag24_AQI",
+      "mean_abs_shap": 0.8099732832204877
+    },
+    {
+      "feature": "cur_AQI",
+      "mean_abs_shap": 0.7772949257526351
+    },
+    {
+      "feature": "cur_NO",
+      "mean_abs_shap": 0.775970015849769
+    },
+    {
+      "feature": "DayOfWeek",
+      "mean_abs_shap": 0.7688423376129421
+    },
+    {
+      "feature": "lag6_AQI",
+      "mean_abs_shap": 0.6192716751012852
+    },
+    {
+      "feature": "lag24_NO",
+      "mean_abs_shap": 0.565065819918919
+    },
+    {
+      "feature": "cur_NOx",
+      "mean_abs_shap": 0.5489773908466095
+    },
+    {
+      "feature": "cur_NO2",
+      "mean_abs_shap": 0.5235434733279389
+    },
+    {
+      "feature": "roll24_CO",
+      "mean_abs_shap": 0.5092485338948196
+    },
+    {
+      "feature": "cur_PM10",
+      "mean_abs_shap": 0.4053903667776526
+    },
+    {
+      "feature": "roll24_NO2",
+      "mean_abs_shap": 0.3815042466225927
+    },
+    {
+      "feature": "cur_SO2",
+      "mean_abs_shap": 0.3331205162927609
+    }
+  ],
+  "by_family": {
+    "Current reading": 26.31631523970765,
+    "Time / season": 16.67124120819526,
+    "24 h average": 13.516912517099481,
+    "Reading 24 h earlier": 9.881012236042936,
+    "Station": 6.821358539061408,
+    "Reading 6 h earlier": 1.9066508954648627
+  }
+}

@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}COVID-19 Lockdown Impact{% endblock %}
+{% block content %}
+
+<section style="padding:32px 30px 24px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+    <div style="background:linear-gradient(135deg,#dc2626,#9333ea);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">🦠</div>
+    <div>
+      <h1 style="margin-bottom:2px">COVID-19 Lockdown Impact on Air Quality</h1>
+      <p class="muted">Lockdown window: 25 Mar – 31 May 2020 · Baseline: same dates 2017–2019 · Associations only – weather not controlled for</p>
+    </div>
+  </div>
+
+  <!-- Summary pill cards -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:24px" id="bucket-pills">
+    {% if buckets %}
+      {% for b in buckets %}
+      <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:18px">
+        <div style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6ee7b7">{{ b.period }}</div>
+        <div style="font-size:1.05rem;font-weight:700;color:#a7f3d0;margin-top:6px">✅ Good/Satisfactory</div>
+        <div style="font-size:.88rem;color:#34d399">2020: {{ b.good_or_satisfactory_2020_pct }}% &nbsp;vs baseline: {{ b.good_or_satisfactory_baseline_pct }}%</div>
+        <div style="font-size:1.05rem;font-weight:700;color:#fca5a5;margin-top:10px">⚠ Poor or worse</div>
+        <div style="font-size:.88rem;color:#f87171">2020: {{ b.poor_or_worse_2020_pct }}% &nbsp;vs baseline: {{ b.poor_or_worse_baseline_pct }}%</div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</section>
+
+<!-- Interactive chart -->
+<section>
+  <h2>📉 Year-on-year trend chart</h2>
+  <p class="muted" style="margin-bottom:18px">Monthly average with 2017–2019 baseline band. Grey shading marks the lockdown window.</p>
+  <div class="controls" style="margin-bottom:20px">
+    <label>City <select id="city">{% for c in cities %}<option>{{ c }}</option>{% endfor %}</select></label>
+    <label>Pollutant
+      <select id="pollutant">{% for p in pollutants %}<option {% if p == 'NO2' %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+    </label>
+    <div style="align-self:end">
+      <button id="draw">📊 Draw chart</button>
+    </div>
+  </div>
+  <div class="error" id="cv-error"></div>
+  <img class="chart" id="cv-chart" alt="COVID impact chart" style="display:none">
+</section>
+
+<!-- YoY summary table -->
+<section>
+  <h2>📊 Year-on-year change across cities</h2>
+  {% if not summary %}
+  <div class="warn">No results yet. Run <code>python covid.py</code>.</div>
+  {% else %}
+  <div class="controls" style="margin-bottom:20px">
+    <label>Period
+      <select id="s-period">
+        <option value="lockdown">Lockdown (25 Mar – 31 May)</option>
+        <option value="unlock1">Unlock 1 (June)</option>
+      </select>
+    </label>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pollutant</th><th>Cities</th><th>Median change</th><th>95% CI</th><th>Adj. p (BH)</th></tr></thead>
+      <tbody id="sum-body"></tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<!-- ML Counterfactual -->
+<section>
+  <h2>🤖 ML counterfactual vs. placebo test</h2>
+  <p class="muted" style="margin-bottom:16px">Deviation of actual 2020 levels from a "business as usual" model trained on earlier data. The 2019 column is the placebo – no lockdown happened that year, so deviations reflect background model error.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pollutant</th><th>2020 median deviation (lockdown)</th><th>2019 placebo deviation</th><th>Signal vs noise</th></tr></thead>
+      <tbody id="cf-body"></tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const SUM = {{ summary | tojson }};
+  const CF  = {{ counterfactual | tojson }};
+
+  async function draw() {
+    hideError('cv-error');
+    const btn = document.getElementById('draw');
+    btn.innerHTML = '<span class="spinner"></span>Loading…';
+    btn.disabled = true;
+    try {
+      const q = new URLSearchParams({
+        city: document.getElementById('city').value,
+        pollutant: document.getElementById('pollutant').value
+      });
+      const r = await fetch('/api/covid-chart?' + q);
+      const d = await r.json();
+      if (!r.ok) { showError('cv-error', d.error); return; }
+      const img = document.getElementById('cv-chart');
+      img.src = 'data:image/png;base64,' + d.chart;
+      img.style.display = 'block';
+    } finally {
+      btn.innerHTML = '📊 Draw chart';
+      btn.disabled = false;
+    }
+  }
+  document.getElementById('draw').addEventListener('click', draw);
+  draw();
+
+  const sp = document.getElementById('s-period');
+  function drawSummary() {
+    if (!sp) return;
+    const body = document.getElementById('sum-body');
+    body.innerHTML = '';
+    SUM.filter(r => r.Period === sp.value).forEach(r => {
+      const tr = document.createElement('tr');
+      const changePct = r.MedianPctChange;
+      const color = changePct <= -20 ? '#34d399' : changePct <= -5 ? '#6ee7b7' :
+                    changePct >= 20 ? '#f87171' : changePct >= 5 ? '#fca5a5' : '#e2e8f0';
+      const chTd = document.createElement('td');
+      chTd.innerHTML = `<span style="font-weight:600;color:${color}">${fmtNum(changePct, 1)}%</span>`;
+      const pTd = document.createElement('td');
+      const pv = r.p_adj_BH;
+      const sig = pv !== null && pv < 0.05;
+      pTd.innerHTML = pv === null ? '—' : `<span style="color:${sig ? '#34d399' : '#94a3b8'};font-weight:${sig ? 600 : 400}">${pv < 0.001 ? '<0.001' : pv.toFixed(3)}${sig ? ' *' : ''}</span>`;
+      tr.append(td(r.Pollutant), td(r.n_cities), chTd,
+                td('[' + fmtNum(r.CI_low, 1) + ', ' + fmtNum(r.CI_high, 1) + ']'), pTd);
+      body.appendChild(tr);
+    });
+  }
+  if (sp) { sp.addEventListener('change', drawSummary); drawSummary(); }
+
+  (function drawCF() {
+    const byPol = {};
+    CF.filter(r => r.Period === 'lockdown').forEach(r => {
+      (byPol[r.Pollutant] = byPol[r.Pollutant] || {})[r.Year] = r.MedianPctDev;
+    });
+    const body = document.getElementById('cf-body');
+    Object.entries(byPol).forEach(([p, v]) => {
+      const tr = document.createElement('tr');
+      const dev2020 = v[2020] ?? null;
+      const dev2019 = v[2019] ?? null;
+      const dTd = document.createElement('td');
+      if (dev2020 !== null) {
+        const col = dev2020 <= -10 ? '#34d399' : dev2020 >= 10 ? '#f87171' : '#e2e8f0';
+        dTd.innerHTML = `<span style="font-weight:600;color:${col}">${fmtNum(dev2020, 1)}%</span>`;
+      } else { dTd.textContent = '—'; }
+      const p19Td = document.createElement('td');
+      p19Td.textContent = dev2019 !== null ? fmtNum(dev2019, 1) + '%' : '—';
+      const snTd = document.createElement('td');
+      if (dev2020 !== null && dev2019 !== null && Math.abs(dev2019) > 0) {
+        const ratio = Math.abs(dev2020 / dev2019).toFixed(1);
+        const strong = Math.abs(dev2020) > 2 * Math.abs(dev2019);
+        snTd.innerHTML = `<span style="color:${strong ? '#34d399' : '#94a3b8'}">${ratio}× ${strong ? '✓ Clear signal' : '(weak)'}</span>`;
+      } else { snTd.textContent = '—'; }
+      tr.append(td(p), dTd, p19Td, snTd);
+      body.appendChild(tr);
+    });
+  })();
+</script>
+{% endblock %}

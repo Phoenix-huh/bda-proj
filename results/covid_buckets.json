@@ -1,0 +1,20 @@
+[
+  {
+    "period": "lockdown",
+    "good_or_satisfactory_2020_pct": 67.3,
+    "good_or_satisfactory_baseline_pct": 34.6,
+    "poor_or_worse_2020_pct": 1.9,
+    "poor_or_worse_baseline_pct": 23.1,
+    "n_city_days_2020": 1668,
+    "n_city_days_baseline": 2771
+  },
+  {
+    "period": "unlock1",
+    "good_or_satisfactory_2020_pct": 76.2,
+    "good_or_satisfactory_baseline_pct": 49.8,
+    "poor_or_worse_2020_pct": 0.7,
+    "poor_or_worse_baseline_pct": 15.0,
+    "n_city_days_2020": 736,
+    "n_city_days_baseline": 1256
+  }
+]

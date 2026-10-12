@@ -13,6 +13,8 @@ from matplotlib.figure import Figure
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 
+from advisory import advisory_for
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -174,6 +176,7 @@ def predict():
             'predictions': predictions,
             'AQI_Bucket': aqi_bucket(predictions['AQI']),
             'lag_source': used,
+            'advisory': advisory_for(predictions['AQI'], predictions.get('PM2.5')),
         })
     except Exception:
         logger.exception("Prediction error")
@@ -233,5 +236,9 @@ def visualize():
         return error('Visualization failed. See server log.', 500)
 
 
+from novelties import bp as novelties_bp
+app.register_blueprint(novelties_bp)
+
+
 if __name__ == '__main__':
-    app.run(debug=os.environ.get('FLASK_DEBUG') == '1')
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1')

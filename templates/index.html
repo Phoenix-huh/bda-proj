@@ -339,9 +339,13 @@
   <nav>
     <div class="brand">Air Quality Dashboard</div>
     <div class="nav-links">
-      <a href="#home">Home</a>
-      <a href="#prediction">Prediction</a>
-      <a href="#visualization">Visualization</a>
+      <a href="/">Home</a>
+      <a href="/#prediction">Prediction</a>
+      <a href="/#visualization">Visualization</a>
+      <a href="/forecast">Forecast</a>
+      <a href="/map">Map</a>
+      <a href="/covid">COVID-19</a>
+      <a href="/models">Models</a>
     </div>
   </nav>
 
@@ -400,6 +404,7 @@
 
         <div id="pollutants-list" class="pollutants-grid"></div>
         <div id="predict-note" class="meta-note"></div>
+        <div id="advisory"></div>
       </div>
     </section>
 
@@ -590,6 +595,10 @@
         noteEl.style.display = 'none';
       }
 
+      if (data.advisory && typeof renderAdvisory === 'function') {
+        renderAdvisory(document.getElementById('advisory'), data.advisory);
+      }
+
       predictResult.style.display = 'block';
     }
 
@@ -631,5 +640,6 @@
       }
     });
   </script>
+  <script src="/static/advisory.js"></script>
 </body>
 </html>

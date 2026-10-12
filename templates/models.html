@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Model Comparison{% endblock %}
+{% block content %}
+
+<!-- Page header -->
+<section style="padding:32px 30px 24px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+    <div style="background:linear-gradient(135deg,#3b82f6,#06b6d4);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">📊</div>
+    <div>
+      <h1 style="margin-bottom:2px">Model Comparison</h1>
+      <p class="muted">Time-based split · trained before 2019 · tested on 2020 including COVID-19 lockdown</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:24px" id="stat-cards">
+    <div class="stat-card" style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:12px;padding:18px">
+      <div style="font-size:.78rem;color:#93c5fd;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Split strategy</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#bfdbfe;margin-top:6px">Temporal split</div>
+      <div style="font-size:.82rem;color:#60a5fa;margin-top:2px">Train &lt; 2019 · Val 2019 · Test 2020</div>
+    </div>
+    <div class="stat-card" style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:12px;padding:18px">
+      <div style="font-size:.78rem;color:#6ee7b7;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Skill metric</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#a7f3d0;margin-top:6px">MAE skill score</div>
+      <div style="font-size:.82rem;color:#34d399;margin-top:2px">vs persistence baseline (higher = better)</div>
+    </div>
+    <div class="stat-card" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:18px">
+      <div style="font-size:.78rem;color:#fcd34d;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Lockdown test</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#fef3c7;margin-top:6px">25 Mar 2020+</div>
+      <div style="font-size:.82rem;color:#f59e0b;margin-top:2px">Out-of-distribution segment</div>
+    </div>
+  </div>
+</section>
+
+<!-- Model comparison table -->
+<section>
+  <h2>🏆 Performance Leaderboard</h2>
+  <p class="muted" style="margin-bottom:20px">Filter by pollutant, forecast horizon and test segment. Best MAE row highlighted in green.</p>
+
+  {% if not comparison %}
+  <div class="warn">No results yet. Run <code>python compare_models.py</code>.</div>
+  {% else %}
+  <div class="controls" style="margin-bottom:20px">
+    <label>Pollutant <select id="f-target"></select></label>
+    <label>Horizon <select id="f-horizon"></select></label>
+    <label>Test segment
+      <select id="f-segment">
+        <option value="test_all">Whole 2020 test</option>
+        <option value="test_pre_lockdown">Pre-lockdown (Jan – 24 Mar)</option>
+        <option value="test_lockdown">Lockdown (25 Mar onwards)</option>
+      </select>
+    </label>
+  </div>
+  <div class="table-wrap">
+    <table id="cmp-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Model</th><th>n samples</th><th>MAE ↓</th><th>RMSE</th><th>R²</th>
+          <th>Skill vs persistence</th>
+        </tr>
+      </thead>
+      <tbody id="cmp-body"></tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<!-- Coverage table -->
+<section>
+  <h2>📐 Prediction-Interval Calibration</h2>
+  <p class="muted" style="margin-bottom:16px">Nominal coverage is <strong style="color:#60a5fa">80%</strong>. Conformal calibration is applied on the 2019 validation set. Coverage often drops during lockdown — the distribution shifted.</p>
+  {% if coverage %}
+  <div class="controls" style="margin-bottom:20px">
+    <label>Segment
+      <select id="c-segment">
+        <option value="test_all">Whole 2020 test</option>
+        <option value="test_pre_lockdown">Pre-lockdown</option>
+        <option value="test_lockdown">Lockdown</option>
+      </select>
+    </label>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pollutant</th><th>Horizon</th><th>n</th>
+          <th>Coverage (raw)</th><th>Coverage (conformal)</th>
+          <th>Width (raw)</th><th>Width (conformal)</th><th>MAE (median)</th>
+        </tr>
+      </thead>
+      <tbody id="cov-body"></tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="warn">No interval results yet. Run <code>python train_forecast.py</code>.</div>
+  {% endif %}
+</section>
+
+<!-- SHAP section -->
+<section>
+  <h2>🔍 What drives the forecasts? (SHAP)</h2>
+  <p class="muted" style="margin-bottom:16px">Each dot in a SHAP beeswarm plot represents one observation. The x-axis shows how much a feature pushed the prediction up or down. Colour indicates the feature value (red = high, blue = low).</p>
+  {% if shap_images %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px">
+    {% for f in shap_images %}
+    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden">
+      <div style="padding:12px 16px;font-size:.82rem;color:#94a3b8;font-weight:600;border-bottom:1px solid rgba(255,255,255,.06)">
+        {{ f | replace('shap_','') | replace('.png','') | replace('_h',' · +') }}h
+      </div>
+      <img src="/results/{{ f }}" alt="{{ f }}" style="width:100%;display:block;margin:0">
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="warn">No SHAP plots yet. Run <code>python explain.py --target AQI --horizon 24</code>.</div>
+  {% endif %}
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const CMP = {{ comparison | tojson }};
+  const COV = {{ coverage | tojson }};
+
+  function fillSelect(sel, values) {
+    values.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v; sel.appendChild(o);
+    });
+  }
+
+  if (CMP.length) {
+    const t = document.getElementById('f-target'),
+          h = document.getElementById('f-horizon'),
+          s = document.getElementById('f-segment');
+    fillSelect(t, [...new Set(CMP.map(r => r.target))]);
+    fillSelect(h, [...new Set(CMP.map(r => r.horizon))].sort((a, b) => a - b));
+
+    const MEDAL = ['🥇','🥈','🥉'];
+    const skillBadge = v => {
+      if (v === null) return '—';
+      const pct = (v * 100).toFixed(1);
+      const col = v >= 0.1 ? '#34d399' : v >= 0 ? '#93c5fd' : '#f87171';
+      return `<span style="color:${col};font-weight:600">${v >= 0 ? '+' : ''}${pct}%</span>`;
+    };
+
+    function drawCmp() {
+      const rows = CMP.filter(r => r.target === t.value && String(r.horizon) === h.value && r.segment === s.value);
+      const sorted = [...rows].sort((a, b) => a.MAE - b.MAE);
+      const best = sorted[0]?.MAE;
+      const body = document.getElementById('cmp-body');
+      body.innerHTML = '';
+      sorted.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        if (r.MAE === best) tr.className = 'best';
+        const rankTd = document.createElement('td');
+        rankTd.innerHTML = MEDAL[i] || (i + 1);
+        const skillTd = document.createElement('td');
+        skillTd.innerHTML = skillBadge(r.MAE_skill_vs_persistence);
+        tr.append(rankTd, td(r.model), td(r.n?.toLocaleString() ?? '—'),
+                  td(fmtNum(r.MAE)), td(fmtNum(r.RMSE)), td(fmtNum(r.R2, 3)), skillTd);
+        body.appendChild(tr);
+      });
+    }
+    [t, h, s].forEach(x => x.addEventListener('change', drawCmp));
+    drawCmp();
+  }
+
+  if (COV.length) {
+    const cs = document.getElementById('c-segment');
+    function drawCov() {
+      const body = document.getElementById('cov-body');
+      body.innerHTML = '';
+      COV.filter(r => r.segment === cs.value).forEach(r => {
+        const tr = document.createElement('tr');
+        const rawPct = (r.coverage_raw * 100).toFixed(1) + '%';
+        const confPct = (r.coverage_conformal * 100).toFixed(1) + '%';
+        const confOk = r.coverage_conformal >= 0.75;
+        const confTd = document.createElement('td');
+        confTd.innerHTML = `<span style="color:${confOk ? '#34d399' : '#f87171'};font-weight:600">${confPct}</span>`;
+        const rawTd = document.createElement('td');
+        rawTd.textContent = rawPct;
+        tr.append(td(r.target), td('+' + r.horizon + ' h'), td(r.n),
+                  rawTd, confTd,
+                  td(fmtNum(r.width_raw, 1)), td(fmtNum(r.width_conformal, 1)), td(fmtNum(r.MAE_median, 2)));
+        body.appendChild(tr);
+      });
+    }
+    cs.addEventListener('change', drawCov);
+    drawCov();
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Multi-horizon Forecast{% endblock %}
+{% block content %}
+
+<section style="padding:32px 30px 24px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+    <div style="background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">🔭</div>
+    <div>
+      <h1 style="margin-bottom:2px">Multi-horizon Forecast</h1>
+      <p class="muted">Quantile LightGBM with {{ level }}% conformal prediction intervals · horizons +1, +6, +24, +48 h</p>
+    </div>
+  </div>
+
+  {% if not ready %}
+  <div class="warn" style="margin-top:20px">
+    Forecast models are not available yet.<br>
+    Run: <code>python features.py</code> → <code>python train_forecast.py</code> then restart the app.<br>
+    <small style="color:#94a3b8;margin-top:4px;display:block">{{ error }}</small>
+  </div>
+  {% else %}
+  <form id="fc-form" style="margin-top:20px">
+    <label>Station
+      <select name="station" id="station" required>
+        {% for s in stations %}<option value="{{ s.StationId }}">{{ s.display }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Date <input type="date" name="date" id="date" required></label>
+    <label>Hour (0-23) <input type="number" name="hour" id="hour" min="0" max="23" value="12" required></label>
+    <label>Pollutant to chart
+      <select name="target" id="target">{% for t in targets %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+    </label>
+    <label>Explain horizon
+      <select name="explain_horizon" id="explain_horizon">{% for h in horizons %}<option value="{{ h }}" {% if h == 24 %}selected{% endif %}>+{{ h }} h</option>{% endfor %}</select>
+    </label>
+    <div style="display:flex;gap:10px;align-self:end">
+      <button type="button" class="secondary" id="latest-btn">⬇ Latest data</button>
+      <button type="submit" id="go-btn">▶ Forecast</button>
+    </div>
+  </form>
+  <div class="error" id="fc-error"></div>
+  {% endif %}
+</section>
+
+<section id="out" style="display:none">
+  <h2>📈 Forecast chart</h2>
+  <p class="muted" id="fc-subtitle" style="margin-bottom:12px"></p>
+  <img class="chart" id="chart" alt="Forecast chart" style="margin-bottom:8px">
+  <div id="advisory" style="margin-top:8px"></div>
+</section>
+
+<section id="out2" style="display:none">
+  <h2>📋 Forecast table</h2>
+  <p class="muted" style="margin-bottom:14px">Lower / Median / Upper bounds of the {{ level }}% prediction interval. Actual values shown where the dataset contains an observation.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Pollutant</th><th>Horizon</th><th>Time</th>
+          <th>Lower</th><th>Median</th><th>Upper</th><th>Actual</th>
+          <th>AQI category (lo / mid / hi)</th>
+        </tr>
+      </thead>
+      <tbody id="fc-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="out3" style="display:none">
+  <h2>🧠 Why this forecast? <span class="muted" id="why-sub"></span></h2>
+  <p class="muted" style="margin-bottom:16px">Each bar shows how much a feature pushed the predicted value <span style="color:#ef4444">above</span> (red) or <span style="color:#3b82f6">below</span> (blue) the model's average output. Exact TreeSHAP values from the median LightGBM model.</p>
+  <div id="why"></div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+{% if ready %}
+<script>
+  document.getElementById('date').value = '2019-11-03';
+
+  document.getElementById('latest-btn').addEventListener('click', async () => {
+    hideError('fc-error');
+    const btn = document.getElementById('latest-btn');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/station-range?station=' + encodeURIComponent(document.getElementById('station').value));
+      const d = await r.json();
+      if (!r.ok) { showError('fc-error', d.error); return; }
+      const last = d.max.split(' ');          // "YYYY-MM-DD HH:00:00"
+      document.getElementById('date').value = last[0];
+      document.getElementById('hour').value = parseInt(last[1].slice(0, 2), 10);
+    } finally { btn.disabled = false; }
+  });
+
+  const form = document.getElementById('fc-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('go-btn');
+    btn.innerHTML = '<span class="spinner"></span>Forecasting…';
+    btn.disabled = true;
+    hideError('fc-error');
+    ['out','out2','out3'].forEach(id => document.getElementById(id).style.display = 'none');
+
+    try {
+      const resp = await fetch('/api/forecast', { method: 'POST', body: new FormData(form) });
+      const d = await resp.json();
+      if (!resp.ok) { showError('fc-error', d.error || 'Forecast failed'); return; }
+
+      // Chart
+      const target = form.target.value;
+      document.getElementById('fc-subtitle').textContent =
+        target + ' forecast from ' + d.origin + ' · ' + (d.interval_level * 100).toFixed(0) + '% prediction interval';
+      document.getElementById('chart').src = 'data:image/png;base64,' + d.chart;
+      renderAdvisory(document.getElementById('advisory'), d.advisory);
+      document.getElementById('out').style.display = 'block';
+
+      // Table
+      const body = document.getElementById('fc-body');
+      body.innerHTML = '';
+      Object.entries(d.forecasts).forEach(([pollutant, items]) => {
+        items.forEach(it => {
+          const tr = document.createElement('tr');
+          const medTd = document.createElement('td');
+          medTd.innerHTML = `<strong>${fmtNum(it.median, 1)}</strong>`;
+          const actualTd = document.createElement('td');
+          if (it.actual !== null) {
+            const ok = Math.abs(it.actual - it.median) < (it.upper - it.lower) / 2;
+            actualTd.innerHTML = `<span style="color:${ok ? '#34d399' : '#f87171'}">${fmtNum(it.actual, 1)}</span>`;
+          } else { actualTd.textContent = '—'; }
+          tr.append(td(pollutant), td('+' + it.horizon + ' h'), td(it.time),
+                    td(fmtNum(it.lower, 1)), medTd, td(fmtNum(it.upper, 1)), actualTd,
+                    td(it.bucket_median ? it.bucket_lower + ' / ' + it.bucket_median + ' / ' + it.bucket_upper : ''));
+          body.appendChild(tr);
+        });
+      });
+      document.getElementById('out2').style.display = 'block';
+
+      // SHAP waterfall
+      const ex = d.explanation;
+      document.getElementById('why-sub').textContent =
+        '(' + ex.target + ' at +' + ex.horizon + ' h · baseline ' + fmtNum(ex.base_value, 1) + ')';
+      const why = document.getElementById('why');
+      why.innerHTML = '';
+      const maxAbs = Math.max(...ex.top.map(f => Math.abs(f.shap)), 1e-9);
+      ex.top.forEach(f => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;margin:8px 0';
+        const name = document.createElement('div');
+        name.style.cssText = 'width:260px;font-size:.88rem;color:#cbd5e1';
+        name.textContent = f.label + (f.value !== null ? ' = ' + f.value : '');
+        const track = document.createElement('div');
+        track.style.cssText = 'flex:1;background:rgba(255,255,255,.06);height:18px;border-radius:9px;position:relative;overflow:hidden';
+        const bar = document.createElement('div');
+        const w = Math.abs(f.shap) / maxAbs * 50;
+        bar.style.cssText = 'position:absolute;top:0;height:18px;border-radius:9px;width:' + w + '%;' +
+          (f.shap >= 0 ? 'left:50%;background:linear-gradient(90deg,#dc2626,#ef4444)' : 'right:50%;background:linear-gradient(270deg,#1d4ed8,#3b82f6)');
+        track.appendChild(bar);
+        const val = document.createElement('div');
+        val.style.cssText = 'width:70px;text-align:right;font-size:.85rem;font-weight:600;color:' + (f.shap >= 0 ? '#fca5a5' : '#93c5fd');
+        val.textContent = (f.shap >= 0 ? '+' : '') + f.shap.toFixed(2);
+        row.append(name, track, val);
+        why.appendChild(row);
+      });
+      document.getElementById('out3').style.display = 'block';
+    } catch (err) {
+      showError('fc-error', 'Network error: ' + err.message);
+    } finally {
+      btn.innerHTML = '▶ Forecast';
+      btn.disabled = false;
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

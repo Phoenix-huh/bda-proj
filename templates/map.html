@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}India Air Quality Map{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  #map {
+    height: 580px;
+    border-radius: 12px;
+    margin-top: 18px;
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  }
+  .leaflet-container { background: #0d1b2a !important; }
+  .legend {
+    background: rgba(10,15,30,.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 10px 13px;
+    border-radius: 10px;
+    font-size: .8rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+    max-width: 190px;
+  }
+  .legend b { display:block; margin-bottom:4px; color:#93c5fd; }
+  .legend i {
+    display: inline-block;
+    width: 13px; height: 13px;
+    margin-right: 7px;
+    vertical-align: middle;
+    border-radius: 3px;
+  }
+  /* Leaflet popup dark theme */
+  .leaflet-popup-content-wrapper {
+    background: rgba(17,24,39,.96) !important;
+    color: #e2e8f0 !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+    backdrop-filter: blur(20px);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: .88rem;
+  }
+  .leaflet-popup-tip { background: rgba(17,24,39,.96) !important; }
+  .leaflet-popup-close-button { color: #94a3b8 !important; font-size: 1.1rem !important; }
+  #map-status {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 20px; padding: 6px 14px;
+    font-size: .83rem; color: #94a3b8; margin-top: 10px;
+  }
+  #map-status .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); flex-shrink: 0;
+    box-shadow: 0 0 6px var(--green);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section style="padding:32px 30px 24px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+    <div style="background:linear-gradient(135deg,#059669,#0284c7);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">🗺️</div>
+    <div>
+      <h1 style="margin-bottom:2px">India Air Quality Map</h1>
+      <p class="muted">Daily AQI by city with health advisories · or switch to COVID-19 year-on-year change view</p>
+    </div>
+  </div>
+
+  <div class="controls" style="margin-top:20px">
+    <label>Layer
+      <select id="layer">
+        <option value="aqi">AQI on a date</option>
+        <option value="covid">COVID-19 change vs 2017–2019</option>
+      </select>
+    </label>
+    <label class="aqi-ctl">Date
+      <input type="date" id="date" min="{{ min_date }}" max="{{ max_date }}" value="{{ max_date }}">
+    </label>
+    <div class="aqi-ctl" style="display:flex;gap:8px;align-self:end">
+      <button class="secondary" id="prev" title="Previous day">◀ Day</button>
+      <button class="secondary" id="next" title="Next day">Day ▶</button>
+      <button id="play">▶ Play (weekly)</button>
+    </div>
+    <label class="cv-ctl" style="display:none">Pollutant
+      <select id="pollutant">{% for p in pollutants %}<option {% if p == 'NO2' %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+    </label>
+    <label class="cv-ctl" style="display:none">Period
+      <select id="period">
+        <option value="lockdown">Lockdown (25 Mar – 31 May)</option>
+        <option value="unlock1">Unlock 1 (June)</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="error" id="map-error"></div>
+  <div id="map-status"><div class="dot" id="status-dot"></div><span id="status-text">Loading map…</span></div>
+  <div id="map"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map').setView([22.5, 79], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14,
+    attribution: '© OpenStreetMap © CARTO'
+  }).addTo(map);
+  const group = L.layerGroup().addTo(map);
+  const legend = L.control({ position: 'bottomright' });
+  let legendEl;
+  legend.onAdd = () => { legendEl = L.DomUtil.create('div', 'legend'); return legendEl; };
+  legend.addTo(map);
+
+  const $ = id => document.getElementById(id);
+
+  const AQI_LEGEND = [
+    ['#00b050', 'Good (0–50)'], ['#92d050', 'Satisfactory (51–100)'],
+    ['#ffd400', 'Moderate (101–200)'], ['#ff9900', 'Poor (201–300)'],
+    ['#ff0000', 'Very Poor (301–400)'], ['#990000', 'Severe (401+)']
+  ];
+  const COVID_LEGEND = [
+    ['#1a9850', '≤ −40%'], ['#91cf60', '−40% to −20%'], ['#d9ef8b', '−20% to −5%'],
+    ['#ffffbf', '−5% to +5%'], ['#fdae61', '+5% to +20%'], ['#d73027', '> +20%']
+  ];
+
+  function setLegend(items, title) {
+    legendEl.innerHTML = '<b>' + title + '</b>';
+    items.forEach(([c, t]) => {
+      legendEl.innerHTML += '<div><i style="background:' + c + '"></i>' + t + '</div>';
+    });
+  }
+  function pctColor(p) {
+    if (p <= -40) return '#1a9850'; if (p <= -20) return '#91cf60'; if (p < -5) return '#d9ef8b';
+    if (p <= 5) return '#ffffbf'; if (p <= 20) return '#fdae61'; return '#d73027';
+  }
+  function popLine(parent, label, text, color) {
+    const d = document.createElement('div');
+    d.style.cssText = 'margin:3px 0;display:flex;justify-content:space-between;gap:12px';
+    const b = document.createElement('span');
+    b.style.cssText = 'color:#94a3b8;font-size:.82rem';
+    b.textContent = label;
+    const v = document.createElement('span');
+    v.style.cssText = 'font-weight:600;color:' + (color || '#e2e8f0');
+    v.textContent = text;
+    d.append(b, v);
+    parent.appendChild(d);
+  }
+
+  function setStatus(text, live) {
+    $('status-text').textContent = text;
+    $('status-dot').style.background = live ? '#10b981' : '#94a3b8';
+    $('status-dot').style.boxShadow = live ? '0 0 6px #10b981' : 'none';
+  }
+
+  async function load() {
+    hideError('map-error');
+    setStatus('Loading…', false);
+    const layer = $('layer').value;
+    const url = layer === 'aqi'
+      ? '/api/map-data?layer=aqi&date=' + $('date').value
+      : '/api/map-data?layer=covid&pollutant=' + encodeURIComponent($('pollutant').value) + '&period=' + $('period').value;
+    const r = await fetch(url);
+    const d = await r.json();
+    group.clearLayers();
+    if (!r.ok) { showError('map-error', d.error || 'Failed to load map data'); setStatus('Error', false); return; }
+
+    if (layer === 'aqi') {
+      setLegend(AQI_LEGEND, 'AQI category');
+      setStatus(d.points.length + ' cities · ' + d.date, true);
+      d.points.forEach(pt => {
+        const box = document.createElement('div');
+        box.style.minWidth = '200px';
+        const h = document.createElement('div');
+        h.style.cssText = 'font-weight:700;font-size:1rem;margin-bottom:8px;color:' + pt.color;
+        h.textContent = pt.city + ' · AQI ' + pt.aqi + ' (' + pt.bucket + ')';
+        box.appendChild(h);
+        const hr = document.createElement('div');
+        hr.style.cssText = 'border-top:1px solid rgba(255,255,255,.1);margin:8px 0';
+        box.appendChild(hr);
+        Object.entries(pt.pollutants).forEach(([k, v]) => {
+          if (v !== null) popLine(box, k, v);
+        });
+        if (pt.advisory) {
+          const adv = document.createElement('div');
+          adv.style.marginTop = '10px';
+          renderAdvisory(adv, pt.advisory);
+          box.appendChild(adv);
+        }
+        L.circleMarker([pt.lat, pt.lon], {
+          radius: 14, color: '#0a0f1e', weight: 1.5,
+          fillColor: pt.color, fillOpacity: 0.88
+        }).bindPopup(box, { maxWidth: 300 }).addTo(group);
+      });
+    } else {
+      setLegend(COVID_LEGEND, $('pollutant').value + ' change');
+      setStatus(d.points.length + ' cities · ' + d.period + ' vs 2017–2019', true);
+      d.points.forEach(pt => {
+        const box = document.createElement('div');
+        const h = document.createElement('div');
+        h.style.cssText = 'font-weight:700;font-size:1rem;margin-bottom:8px';
+        const col = pctColor(pt.pct);
+        h.innerHTML = pt.city + ' <span style="color:' + col + '">' + (pt.pct > 0 ? '+' : '') + pt.pct + '%</span>';
+        box.appendChild(h);
+        const hr = document.createElement('div');
+        hr.style.cssText = 'border-top:1px solid rgba(255,255,255,.1);margin:8px 0';
+        box.appendChild(hr);
+        popLine(box, '2020 mean', pt.mean2020);
+        popLine(box, 'Baseline mean', pt.meanBase);
+        L.circleMarker([pt.lat, pt.lon], {
+          radius: 14, color: '#0a0f1e', weight: 1.5,
+          fillColor: col, fillOpacity: 0.88
+        }).bindPopup(box).addTo(group);
+      });
+    }
+  }
+
+  function shiftDate(days) {
+    const d = new Date($('date').value + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    const s = d.toISOString().slice(0, 10);
+    if (s < $('date').min || s > $('date').max) return false;
+    $('date').value = s; return true;
+  }
+  let timer = null;
+  function stopPlay() {
+    if (timer) { clearInterval(timer); timer = null; $('play').textContent = '▶ Play (weekly)'; }
+  }
+  function updateControls() {
+    const aqi = $('layer').value === 'aqi';
+    document.querySelectorAll('.aqi-ctl').forEach(e => e.style.display = aqi ? '' : 'none');
+    document.querySelectorAll('.cv-ctl').forEach(e => e.style.display = aqi ? 'none' : '');
+    stopPlay(); load();
+  }
+
+  $('layer').addEventListener('change', updateControls);
+  ['pollutant', 'period', 'date'].forEach(id => $(id).addEventListener('change', load));
+  $('prev').addEventListener('click', () => { stopPlay(); if (shiftDate(-1)) load(); });
+  $('next').addEventListener('click', () => { stopPlay(); if (shiftDate(1)) load(); });
+  $('play').addEventListener('click', () => {
+    if (timer) { stopPlay(); return; }
+    $('play').textContent = '⏸ Pause';
+    timer = setInterval(() => { if (!shiftDate(7)) { stopPlay(); return; } load(); }, 1200);
+  });
+  updateControls();
+</script>
+{% endblock %}
