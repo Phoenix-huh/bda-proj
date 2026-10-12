@@ -1,2 +1,2 @@
-data/data/station_hour_cleaned.csv filter=lfs diff=lfs merge=lfs -text
-data/data/city_hour.csv filter=lfs diff=lfs merge=lfs -text
+data/station_hour_cleaned.csv filter=lfs diff=lfs merge=lfs -text
+data/city_hour.csv filter=lfs diff=lfs merge=lfs -text
