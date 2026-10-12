@@ -1,413 +1,237 @@
-from flask import Flask, render_template, request, jsonify
-import joblib
-import pandas as pd
-import datetime
-import os
-import logging
-import json
-import matplotlib.pyplot as plt
-from io import BytesIO
 import base64
+import datetime
+import json
+import logging
+import os
+import sqlite3
+from io import BytesIO
 
-# Configure logging
+import joblib
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib.figure import Figure
+import pandas as pd
+from flask import Flask, jsonify, render_template, request
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+
+
+def path(*parts):
+    return os.path.join(BASE, *parts)
+
+
+MODEL_PATH = os.environ.get('MODEL_PATH', path('models', 'air_quality_model.pkl'))
+DB_PATH = path('cache', 'hourly.db')
+
+TARGETS = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2',
+           'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI']
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler(path('app.log')), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Load the model
-try:
-    model = joblib.load('models/air_quality_model.pkl')
-    logger.info("Model loaded successfully")
-except Exception as e:
-    logger.error(f"Error loading model: {str(e)}")
-    raise
+# ----------------------------------------------------------------------
+# Startup: load model + small cache files only (no 222 MB CSV)
+# ----------------------------------------------------------------------
+model = joblib.load(MODEL_PATH)
+logger.info(f"Model loaded from {MODEL_PATH}")
 
-# Load stations for dropdown and validation
-try:
-    stations = pd.read_csv('data/stations.csv')
-    # Create a list of dictionaries for dropdown
-    station_list = [
-        {'StationId': row['StationId'], 'display': f"{row['City']}, {row['State']}"}
-        for _, row in stations[['StationId', 'City', 'State']].dropna().iterrows()
+stations = pd.read_csv(path('data', 'stations.csv'))
+station_list = [
+    {'StationId': r.StationId, 'display': f"{r.City}, {r.State} ({r.StationId})"}
+    for r in stations[['StationId', 'City', 'State']].dropna().itertuples()
+]
+valid_stations = {s['StationId'] for s in station_list}
+
+with open(path('cache', 'global_means.json')) as f:
+    global_means = json.load(f)
+
+station_means = pd.read_csv(path('cache', 'station_means.csv')).set_index('StationId').to_dict('index')
+station_hour_means = (pd.read_csv(path('cache', 'station_hour_means.csv'))
+                      .set_index(['StationId', 'Hour']).to_dict('index'))
+_daily = pd.read_csv(path('cache', 'station_daily.csv'), parse_dates=['Date'])
+daily_by_station = {sid: g.set_index('Date').sort_index() for sid, g in _daily.groupby('StationId')}
+
+clip_bounds = {}
+if os.path.exists(path('models', 'clip_bounds.json')):
+    with open(path('models', 'clip_bounds.json')) as f:
+        clip_bounds = json.load(f)
+else:
+    logger.warning("models/clip_bounds.json missing; retrain with train_model.py")
+
+logger.info(f"Ready: {len(valid_stations)} stations")
+
+
+# ----------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------
+def error(msg, code=400):
+    return jsonify({'error': msg}), code
+
+
+def aqi_bucket(aqi):
+    if aqi <= 50:
+        return 'Good'
+    if aqi <= 100:
+        return 'Satisfactory'
+    if aqi <= 200:
+        return 'Moderate'
+    if aqi <= 300:
+        return 'Poor'
+    if aqi <= 400:
+        return 'Very Poor'
+    return 'Severe'
+
+
+def observed_previous_hour(station, when):
+    """Actual reading at (station, when - 1h) from SQLite, or {}."""
+    if not os.path.exists(DB_PATH):
+        return {}
+    prev = (when - datetime.timedelta(hours=1)).strftime('%Y-%m-%d %H:00:00')
+    cols = ','.join(f'"{t}"' for t in TARGETS)
+    con = sqlite3.connect(DB_PATH)
+    try:
+        row = con.execute(
+            f'SELECT {cols} FROM hourly WHERE StationId=? AND Datetime=? LIMIT 1',
+            (station, prev)).fetchone()
+    finally:
+        con.close()
+    return dict(zip(TARGETS, row)) if row else {}
+
+
+def build_lag_features(station, when):
+    """Best available lag-1 values: observed > station-hour mean > station mean > global mean."""
+    prev_hour = (when.hour - 1) % 24
+    layers = [
+        ('observed', observed_previous_hour(station, when)),
+        ('station-hour-average', station_hour_means.get((station, prev_hour), {})),
+        ('station-average', station_means.get(station, {})),
+        ('global-average', global_means),
     ]
-    logger.info(f"Loaded {len(station_list)} stations: {[s['StationId'] for s in station_list[:10]]}...")
-except Exception as e:
-    logger.error(f"Error loading stations.csv: {str(e)}")
-    raise
+    values, used = {}, []
+    for t in TARGETS:
+        for name, source in layers:
+            v = source.get(t)
+            if v is not None and not pd.isna(v):
+                col = f'{t}_lag1'
+                v = float(v)
+                if col in clip_bounds:
+                    lo, hi = clip_bounds[col]
+                    v = min(max(v, lo), hi)
+                values[col] = v
+                if name not in used:
+                    used.append(name)
+                break
+    return values, used
 
-# Load mean values for lag features
-try:
-    station_hour = pd.read_csv('data/station_hour_cleaned.csv', low_memory=False)
-    targets = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 
-               'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI']
-    lag_means = {f'{target}_lag1': station_hour[target].mean() for target in targets}
-    logger.info("Loaded mean values for lag features")
-except Exception as e:
-    logger.error(f"Error loading lag feature means: {str(e)}")
-    lag_means = {}
 
-# Load data for visualization (once at startup)
-try:
-    station_hour['Datetime'] = pd.to_datetime(station_hour['Datetime'])
-    station_hour['Date'] = station_hour['Datetime'].dt.date  # For daily aggregation
-    logger.info("Data loaded for visualization")
-except Exception as e:
-    logger.error(f"Error loading data for visualization: {str(e)}")
-    station_hour = pd.DataFrame()  # Empty if error
+def fig_to_b64(fig):
+    buf = BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight')
+    return base64.b64encode(buf.getvalue()).decode('ascii')
 
+
+# ----------------------------------------------------------------------
+# Routes
+# ----------------------------------------------------------------------
 @app.route('/')
 def home():
-    logger.debug("Rendering home page")
-    return render_template('index.html', stations=station_list, targets=targets)
+    return render_template('index.html', stations=station_list, targets=TARGETS)
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    station = request.form.get('station', '').strip()
+    date_str = request.form.get('date', '').strip()
+    hour_str = request.form.get('hour', '').strip()
+
+    if station not in valid_stations:
+        return error(f"Unknown station: {station!r}")
     try:
-        station = request.form['station']
-        date_str = request.form['date']
-        hour = request.form['hour']
-        logger.debug(f"Received form data: Station={station}, Date={date_str}, Hour={hour}")
+        hour = int(hour_str)
+        if not 0 <= hour <= 23:
+            raise ValueError
+    except ValueError:
+        return error('Hour must be an integer between 0 and 23')
+    try:
+        when = datetime.datetime.strptime(date_str, '%Y-%m-%d').replace(hour=hour)
+    except ValueError:
+        return error('Date must be in YYYY-MM-DD format (e.g., 2019-01-15)')
 
-        # Validate StationId
-        if station not in [s['StationId'] for s in station_list]:
-            logger.error(f"Invalid StationId: {station}")
-            return jsonify({'error': f"Station {station} not found in stations.csv"})
-
-        try:
-            hour = int(hour)
-            if not 0 <= hour <= 23:
-                raise ValueError
-        except ValueError:
-            logger.error(f"Invalid hour: {hour}")
-            return jsonify({'error': 'Hour must be an integer between 0 and 23'})
-
-        try:
-            date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            logger.debug(f"Parsed date: {date}")
-        except ValueError:
-            logger.error(f"Invalid date format: {date_str}. Expected YYYY-MM-DD")
-            return jsonify({'error': 'Date must be in YYYY-MM-DD format (e.g., 2017-01-01)'})
-
-        input_df = pd.DataFrame({
-            'StationId': [station],
-            'Year': [date.year],
-            'Month': [date.month],
-            'Day': [date.day],
-            'Hour': [hour],
-            **{key: [value] for key, value in lag_means.items()}  # Add lag features with mean values
+    try:
+        lags, used = build_lag_features(station, when)
+        row = {'StationId': [station], 'Year': [when.year], 'Month': [when.month],
+               'Day': [when.day], 'Hour': [hour]}
+        row.update({k: [v] for k, v in lags.items()})
+        pred = model.predict(pd.DataFrame(row))[0]
+        predictions = {t: float(v) for t, v in zip(TARGETS, pred)}
+        return jsonify({
+            'predictions': predictions,
+            'AQI_Bucket': aqi_bucket(predictions['AQI']),
+            'lag_source': used,
         })
-        logger.debug(f"Input DataFrame:\n{input_df.to_string()}")
+    except Exception:
+        logger.exception("Prediction error")
+        return error('Prediction failed. See server log.', 500)
 
-        prediction = model.predict(input_df)[0]
-        logger.info(f"Prediction generated: {prediction}")
-
-        pred_dict = dict(zip(targets, prediction))
-        aqi = pred_dict['AQI']
-        if aqi <= 50:
-            bucket = 'Good'
-        elif aqi <= 100:
-            bucket = 'Satisfactory'
-        elif aqi <= 200:
-            bucket = 'Moderate'
-        elif aqi <= 300:
-            bucket = 'Poor'
-        elif aqi <= 400:
-            bucket = 'Very Poor'
-        else:
-            bucket = 'Severe'
-        pred_dict['AQI_Bucket'] = bucket
-
-        logger.info(f"Prediction result: {pred_dict}")
-        return jsonify(pred_dict)
-    except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        return jsonify({'error': f"Prediction failed: {str(e)}"})
 
 @app.route('/visualize', methods=['POST'])
 def visualize():
+    station = request.form.get('station', '').strip()
+    params = request.form.getlist('parameters') or list(TARGETS)
+
+    if station not in valid_stations:
+        return error(f"Unknown station: {station!r}")
+    bad = [p for p in params if p not in TARGETS]
+    if bad:
+        return error(f"Unknown parameters: {bad}")
+    if station not in station_means or station not in daily_by_station:
+        return error(f"No data available for station {station}", 404)
+
     try:
-        station = request.form['station']
-        parameters = request.form.getlist('parameters')
-        if not parameters:
-            parameters = targets  # Default to all if none selected
-        logger.debug(f"Visualization request: Station={station}, Parameters={parameters}")
+        averages = pd.Series(station_means[station])[params].dropna()
+        positive = averages[averages > 0]
+        daily = daily_by_station[station]
 
-        if station not in [s['StationId'] for s in station_list]:
-            logger.error(f"Invalid StationId: {station}")
-            return jsonify({'error': f"Station {station} not found"})
+        # Pie
+        fig = Figure(figsize=(7, 6))
+        ax = fig.subplots()
+        ax.pie(positive.values, labels=positive.index, autopct='%1.1f%%')
+        ax.set_title('Distribution of Selected Gases')
+        pie_url = fig_to_b64(fig)
 
-        # Filter data for station
-        df_station = station_hour[station_hour['StationId'] == station]
-        if df_station.empty:
-            logger.error(f"No data for station: {station}")
-            return jsonify({'error': f"No data available for station {station}"})
+        # Bar
+        fig = Figure(figsize=(8, 5))
+        ax = fig.subplots()
+        ax.bar(averages.index, averages.values, color='#66b3ff')
+        ax.set_title('Average Values of Selected Gases')
+        ax.set_ylabel('Average value')
+        ax.set_xlabel('Parameter')
+        fig.autofmt_xdate()
+        bar_url = fig_to_b64(fig)
 
-        # Compute averages for selected parameters
-        averages = df_station[parameters].mean()
+        # Line
+        fig = Figure(figsize=(10, 5))
+        ax = fig.subplots()
+        for p in params:
+            ax.plot(daily.index, daily[p], label=p, linewidth=1)
+        ax.set_title('Daily Trend of Selected Gases')
+        ax.set_ylabel('Value')
+        ax.set_xlabel('Date')
+        ax.legend(loc='upper right', ncol=2, fontsize=8)
+        fig.autofmt_xdate()
+        line_url = fig_to_b64(fig)
 
-        # Generate Pie Diagram (distribution of averages)
-        fig_pie, ax_pie = plt.subplots()
-        averages.plot(kind='pie', autopct='%1.1f%%', ax=ax_pie, colors=['#ff9999','#66b3ff','#99ff99','#ffcc99','#a3a3a3','#ff66b3','#99ffcc','#cc99ff','#ffcc66','#66ff99','#ccff99','#99ccff','#ff99cc'])
-        ax_pie.set_title('Distribution of Selected Gases')
-        ax_pie.set_ylabel('')
-        buffer_pie = BytesIO()
-        fig_pie.savefig(buffer_pie, format='png')
-        buffer_pie.seek(0)
-        pie_url = base64.b64encode(buffer_pie.getvalue()).decode('utf-8')
-
-        # Generate Bar Graph (averages)
-        fig_bar, ax_bar = plt.subplots()
-        averages.plot(kind='bar', ax=ax_bar, color='#66b3ff')
-        ax_bar.set_title('Average Values of Selected Gases')
-        ax_bar.set_ylabel('Average Value')
-        ax_bar.set_xlabel('Parameter')
-        buffer_bar = BytesIO()
-        fig_bar.savefig(buffer_bar, format='png')
-        buffer_bar.seek(0)
-        bar_url = base64.b64encode(buffer_bar.getvalue()).decode('utf-8')
-
-        # Generate Line Chart (daily trend)
-        daily_means = df_station.groupby('Date')[parameters].mean()
-        fig_line, ax_line = plt.subplots()
-        daily_means.plot(kind='line', ax=ax_line)
-        ax_line.set_title('Daily Trend of Selected Gases')
-        ax_line.set_ylabel('Value')
-        ax_line.set_xlabel('Date')
-        ax_line.legend(loc='upper right')
-        buffer_line = BytesIO()
-        fig_line.savefig(buffer_line, format='png')
-        buffer_line.seek(0)
-        line_url = base64.b64encode(buffer_line.getvalue()).decode('utf-8')
-
-        logger.info("Visualizations generated successfully")
         return jsonify({'pie_url': pie_url, 'bar_url': bar_url, 'line_url': line_url})
-    except Exception as e:
-        logger.error(f"Visualization error: {str(e)}")
-        return jsonify({'error': f"Visualization failed: {str(e)}"})
+    except Exception:
+        logger.exception("Visualization error")
+        return error('Visualization failed. See server log.', 500)
+
 
 if __name__ == '__main__':
-    logger.info("Starting Flask app")
-    app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# from flask import Flask, render_template, request, jsonify
-# import joblib
-# import pandas as pd
-# import datetime
-# import os
-# import logging
-# import json
-# import matplotlib.pyplot as plt
-# from io import BytesIO
-# import base64
-
-# # Configure logging
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(levelname)s - %(message)s',
-#     handlers=[
-#         logging.FileHandler('app.log'),
-#         logging.StreamHandler()
-#     ]
-# )
-# logger = logging.getLogger(__name__)
-
-# app = Flask(__name__)
-
-# # Load the model
-# try:
-#     model = joblib.load('models/air_quality_model_svm.pkl')  # Changed to SVM model
-#     logger.info("Model loaded successfully")
-# except Exception as e:
-#     logger.error(f"Error loading model: {str(e)}")
-#     raise
-
-# # Load stations for dropdown and validation
-# try:
-#     stations = pd.read_csv('data/stations.csv')
-#     station_list = [
-#         {'StationId': row['StationId'], 'display': f"{row['City']}, {row['State']}"}
-#         for _, row in stations[['StationId', 'City', 'State']].dropna().iterrows()
-#     ]
-#     logger.info(f"Loaded {len(station_list)} stations: {[s['StationId'] for s in station_list[:10]]}...")
-# except Exception as e:
-#     logger.error(f"Error loading stations.csv: {str(e)}")
-#     raise
-
-# # Load mean values for lag features
-# try:
-#     station_hour = pd.read_csv('data/station_hour_cleaned.csv', low_memory=False)
-#     targets = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 
-#                'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI']
-#     lag_means = {f'{target}_lag1': station_hour[target].mean() for target in targets}
-#     logger.info("Loaded mean values for lag features")
-# except Exception as e:
-#     logger.error(f"Error loading lag feature means: {str(e)}")
-#     lag_means = {}
-
-# # Load data for visualization (once at startup)
-# try:
-#     station_hour['Datetime'] = pd.to_datetime(station_hour['Datetime'])
-#     station_hour['Date'] = station_hour['Datetime'].dt.date
-#     logger.info("Data loaded for visualization")
-# except Exception as e:
-#     logger.error(f"Error loading data for visualization: {str(e)}")
-#     station_hour = pd.DataFrame()
-
-# @app.route('/')
-# def home():
-#     logger.debug("Rendering home page")
-#     return render_template('index.html', stations=station_list, targets=targets)
-
-# @app.route('/predict', methods=['POST'])
-# def predict():
-#     try:
-#         station = request.form['station']
-#         date_str = request.form['date']
-#         hour = request.form['hour']
-#         logger.debug(f"Received form data: Station={station}, Date={date_str}, Hour={hour}")
-
-#         if station not in [s['StationId'] for s in station_list]:
-#             logger.error(f"Invalid StationId: {station}")
-#             return jsonify({'error': f"Station {station} not found in stations.csv"})
-
-#         try:
-#             hour = int(hour)
-#             if not 0 <= hour <= 23:
-#                 raise ValueError
-#         except ValueError:
-#             logger.error(f"Invalid hour: {hour}")
-#             return jsonify({'error': 'Hour must be an integer between 0 and 23'})
-
-#         try:
-#             date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-#             logger.debug(f"Parsed date: {date}")
-#         except ValueError:
-#             logger.error(f"Invalid date format: {date_str}. Expected YYYY-MM-DD")
-#             return jsonify({'error': 'Date must be in YYYY-MM-DD format (e.g., 2017-01-01)'})
-
-#         input_df = pd.DataFrame({
-#             'StationId': [station],
-#             'Year': [date.year],
-#             'Month': [date.month],
-#             'Day': [date.day],
-#             'Hour': [hour],
-#             **{key: [value] for key, value in lag_means.items()}
-#         })
-#         logger.debug(f"Input DataFrame:\n{input_df.to_string()}")
-
-#         prediction = model.predict(input_df)[0]
-#         logger.info(f"Prediction generated: {prediction}")
-
-#         pred_dict = dict(zip(targets, prediction))
-#         aqi = pred_dict['AQI']
-#         if aqi <= 50:
-#             bucket = 'Good'
-#         elif aqi <= 100:
-#             bucket = 'Satisfactory'
-#         elif aqi <= 200:
-#             bucket = 'Moderate'
-#         elif aqi <= 300:
-#             bucket = 'Poor'
-#         elif aqi <= 400:
-#             bucket = 'Very Poor'
-#         else:
-#             bucket = 'Severe'
-#         pred_dict['AQI_Bucket'] = bucket
-
-#         logger.info(f"Prediction result: {pred_dict}")
-#         return jsonify(pred_dict)
-#     except Exception as e:
-#         logger.error(f"Prediction error: {str(e)}")
-#         return jsonify({'error': f"Prediction failed: {str(e)}"})
-
-# @app.route('/visualize', methods=['POST'])
-# def visualize():
-#     try:
-#         station = request.form['station']
-#         parameters = request.form.getlist('parameters')
-#         if not parameters:
-#             parameters = targets
-#         logger.debug(f"Visualization request: Station={station}, Parameters={parameters}")
-
-#         if station not in [s['StationId'] for s in station_list]:
-#             logger.error(f"Invalid StationId: {station}")
-#             return jsonify({'error': f"Station {station} not found"})
-
-#         df_station = station_hour[station_hour['StationId'] == station]
-#         if df_station.empty:
-#             logger.error(f"No data for station: {station}")
-#             return jsonify({'error': f"No data available for station {station}"})
-
-#         averages = df_station[parameters].mean()
-
-#         fig_pie, ax_pie = plt.subplots()
-#         averages.plot(kind='pie', autopct='%1.1f%%', ax=ax_pie, colors=['#ff9999','#66b3ff','#99ff99','#ffcc99','#a3a3a3','#ff66b3','#99ffcc','#cc99ff','#ffcc66','#66ff99','#ccff99','#99ccff','#ff99cc'])
-#         ax_pie.set_title('Distribution of Selected Gases')
-#         ax_pie.set_ylabel('')
-#         buffer_pie = BytesIO()
-#         fig_pie.savefig(buffer_pie, format='png')
-#         buffer_pie.seek(0)
-#         pie_url = base64.b64encode(buffer_pie.getvalue()).decode('utf-8')
-
-#         fig_bar, ax_bar = plt.subplots()
-#         averages.plot(kind='bar', ax=ax_bar, color='#66b3ff')
-#         ax_bar.set_title('Average Values of Selected Gases')
-#         ax_bar.set_ylabel('Average Value')
-#         ax_bar.set_xlabel('Parameter')
-#         buffer_bar = BytesIO()
-#         fig_bar.savefig(buffer_bar, format='png')
-#         buffer_bar.seek(0)
-#         bar_url = base64.b64encode(buffer_bar.getvalue()).decode('utf-8')
-
-#         daily_means = df_station.groupby('Date')[parameters].mean()
-#         fig_line, ax_line = plt.subplots()
-#         daily_means.plot(kind='line', ax=ax_line)
-#         ax_line.set_title('Daily Trend of Selected Gases')
-#         ax_line.set_ylabel('Value')
-#         ax_line.set_xlabel('Date')
-#         ax_line.legend(loc='upper right')
-#         buffer_line = BytesIO()
-#         fig_line.savefig(buffer_line, format='png')
-#         buffer_line.seek(0)
-#         line_url = base64.b64encode(buffer_line.getvalue()).decode('utf-8')
-
-#         logger.info("Visualizations generated successfully")
-#         return jsonify({'pie_url': pie_url, 'bar_url': bar_url, 'line_url': line_url})
-#     except Exception as e:
-#         logger.error(f"Visualization error: {str(e)}")
-#         return jsonify({'error': f"Visualization failed: {str(e)}"})
-
-# if __name__ == '__main__':
-#     logger.info("Starting Flask app")
-#     app.run(debug=True)
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1')

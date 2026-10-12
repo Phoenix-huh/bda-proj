@@ -1,0 +1,17 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.py[cod]
+app.log
+train_model.log
+cache/
+.pytest_cache/
+.Rproj.user/
+.RData
+.RDataTmp
+.Rhistory
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

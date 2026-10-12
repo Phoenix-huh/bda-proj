@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Quality Dashboard</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --nav-bg: #1e3a8a;
+      --hero-bg: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --item-bg: #f8fafc;
+      --item-border: #e2e8f0;
+      --item-text: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* Navigation */
+    nav {
+      background-color: var(--nav-bg);
+      color: #ffffff;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    nav .brand {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    nav .nav-links a {
+      color: #e2e8f0;
+      text-decoration: none;
+      margin-left: 20px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    nav .nav-links a:hover {
+      color: #ffffff;
+    }
+
+    /* Hero */
+    .hero {
+      background: var(--hero-bg);
+      color: #ffffff;
+      text-align: center;
+      padding: 48px 20px;
+    }
+
+    .hero h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -0.025em;
+    }
+
+    .hero p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* Main Container */
+    main {
+      max-width: 1080px;
+      margin: 32px auto;
+      padding: 0 20px;
+    }
+
+    /* Cards & Sections */
+    .dashboard-card {
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 32px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+
+    .dashboard-card h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Forms */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      background-color: #ffffff;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    select[multiple].form-control {
+      min-height: 140px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      background-color: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s ease, opacity 0.2s ease;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Error Banner */
+    .alert-error {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+      font-size: 0.95rem;
+    }
+
+    /* Results Section */
+    .results-container {
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+
+    .results-header {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    /* AQI Summary Banner */
+    .aqi-summary-card {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .aqi-main-display {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .aqi-label {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .aqi-num {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: capitalize;
+    }
+
+    .badge-good { background-color: #009865; }
+    .badge-satisfactory { background-color: #58b21d; }
+    .badge-moderate { background-color: #d9b300; color: #1e293b; }
+    .badge-poor { background-color: #f28c28; }
+    .badge-very-poor { background-color: #e03a3a; }
+    .badge-severe { background-color: #7e0023; }
+    .badge-unknown { background-color: #64748b; }
+
+    /* Pollutant Grid */
+    .pollutants-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .pollutant-item {
+      background-color: var(--item-bg);
+      border: 1px solid var(--item-border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pollutant-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #1e40af;
+    }
+
+    .pollutant-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .meta-note {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: none;
+    }
+
+    /* Visualization Images */
+    .charts-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      margin-top: 24px;
+    }
+
+    .chart-wrapper {
+      background-color: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .chart-wrapper h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    .chart-wrapper img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 32px 20px;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      background-color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav>
+    <div class="brand">Air Quality Dashboard</div>
+    <div class="nav-links">
+      <a href="#home">Home</a>
+      <a href="#prediction">Prediction</a>
+      <a href="#visualization">Visualization</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero" id="home">
+    <h1>Monitor Air Quality with Precision</h1>
+    <p>Predict ambient air pollutant levels and explore historical trends across Indian monitoring stations.</p>
+  </header>
+
+  <main>
+    <!-- Section 1: Air Quality Prediction -->
+    <section class="dashboard-card" id="prediction">
+      <h2>Air Quality Prediction</h2>
+      <form id="predict-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="station-select">Location / Monitoring Station</label>
+            <select name="station" id="station-select" class="form-control" required>
+              {% for s in stations %}
+              <option value="{{ s.StationId }}">{{ s.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="date-input">Date (YYYY-MM-DD)</label>
+            <input type="date" name="date" id="date-input" class="form-control" required>
+          </div>
+
+          <div class="form-group">
+            <label for="hour-input">Hour (0-23)</label>
+            <input type="number" name="hour" id="hour-input" class="form-control" min="0" max="23" value="12" required>
+          </div>
+
+          <div class="form-group">
+            <button type="submit" id="predict-btn" class="btn">Predict</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="predict-error" class="alert-error" role="alert"></div>
+
+      <!-- Prediction Results Display -->
+      <div id="predict-result" class="results-container">
+        <div class="results-header">Prediction Results:</div>
+        
+        <div class="aqi-summary-card">
+          <div class="aqi-main-display">
+            <span class="aqi-label">Air Quality Index (AQI):</span>
+            <span id="aqi-value" class="aqi-num">--</span>
+          </div>
+          <div>
+            <span id="aqi-badge" class="badge badge-unknown">Pending</span>
+          </div>
+        </div>
+
+        <div id="pollutants-list" class="pollutants-grid"></div>
+        <div id="predict-note" class="meta-note"></div>
+      </div>
+    </section>
+
+    <!-- Section 2: Analytics and Visualization -->
+    <section class="dashboard-card" id="visualization">
+      <h2>Analytics and Visualization</h2>
+      <form id="viz-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="viz-station-select">Location / Monitoring Station</label>
+            <select name="station" id="viz-station-select" class="form-control" required>
+              {% for s in stations %}
+              <option value="{{ s.StationId }}">{{ s.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group" style="grid-column: span 2;">
+            <label for="param-select">Parameters (Ctrl/Cmd-click for multiple; none = all)</label>
+            <select name="parameters" id="param-select" class="form-control" multiple>
+              {% for t in targets %}
+              <option value="{{ t }}" selected>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <button type="submit" id="viz-btn" class="btn">Generate Charts</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="viz-error" class="alert-error" role="alert"></div>
+
+      <!-- Visualization Charts Display -->
+      <div id="viz-result" class="results-container">
+        <div class="results-header">Historical Station Analytics:</div>
+        <div class="charts-grid">
+          <div class="chart-wrapper">
+            <h3>Distribution of Selected Gases (Pie Chart)</h3>
+            <img id="pie-img" alt="Pie Chart of Pollutant Distribution">
+          </div>
+          <div class="chart-wrapper">
+            <h3>Average Values of Selected Gases (Bar Graph)</h3>
+            <img id="bar-img" alt="Bar Graph of Average Pollutant Concentrations">
+          </div>
+          <div class="chart-wrapper">
+            <h3>Daily Trend of Selected Gases (Time-Series Line Chart)</h3>
+            <img id="line-img" alt="Time-Series Line Chart of Daily Trends">
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Central Pollution Control Board (CPCB) India Air Quality Monitoring Data (2015&ndash;2020). Model estimates for analytical purposes.
+  </footer>
+
+  <script>
+    // Set default date picker value to today's date in YYYY-MM-DD
+    (function initDate() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('date-input').value = `${yyyy}-${mm}-${dd}`;
+    })();
+
+    // Helper: Safely post FormData to a URL
+    async function postFormData(url, formElement) {
+      const formData = new FormData(formElement);
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+
+      let json;
+      try {
+        json = await response.json();
+      } catch (err) {
+        throw new Error(`Server returned an invalid or non-JSON response (HTTP ${response.status})`);
+      }
+
+      if (!response.ok || json.error) {
+        throw new Error(json.error || `Request failed with HTTP status ${response.status}`);
+      }
+
+      return json;
+    }
+
+    // Prediction Form Submission Handler
+    const predictForm = document.getElementById('predict-form');
+    const predictBtn = document.getElementById('predict-btn');
+    const predictError = document.getElementById('predict-error');
+    const predictResult = document.getElementById('predict-result');
+
+    predictForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      predictError.style.display = 'none';
+      predictError.textContent = '';
+      predictBtn.disabled = true;
+      const originalText = predictBtn.textContent;
+      predictBtn.textContent = 'Predicting...';
+
+      try {
+        const data = await postFormData('/predict', predictForm);
+        renderPrediction(data);
+      } catch (err) {
+        predictResult.style.display = 'none';
+        predictError.textContent = err.message || 'An unexpected error occurred during prediction.';
+        predictError.style.display = 'block';
+      } finally {
+        predictBtn.disabled = false;
+        predictBtn.textContent = originalText;
+      }
+    });
+
+    // Render Prediction Results
+    function renderPrediction(data) {
+      if (!data || typeof data !== 'object') {
+        throw new Error('Received malformed prediction data structure.');
+      }
+
+      // Check whether data is flat (current app.py) or nested (future app.py)
+      const hasNested = data.predictions && typeof data.predictions === 'object';
+      const source = hasNested ? data.predictions : data;
+
+      // Extract AQI value
+      let rawAqi = source.AQI !== undefined ? source.AQI : data.AQI;
+      const aqiNum = rawAqi !== undefined && rawAqi !== null && !isNaN(Number(rawAqi))
+        ? Number(rawAqi).toFixed(2)
+        : '--';
+      document.getElementById('aqi-value').textContent = aqiNum;
+
+      // Extract AQI Category / Bucket
+      const aqiBucket = (data.AQI_Bucket || source.AQI_Bucket || 'Unknown').toString();
+      const badge = document.getElementById('aqi-badge');
+      badge.textContent = aqiBucket;
+      
+      const bucketClass = aqiBucket.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      badge.className = 'badge ' + (['good', 'satisfactory', 'moderate', 'poor', 'very-poor', 'severe'].includes(bucketClass)
+        ? 'badge-' + bucketClass
+        : 'badge-unknown');
+
+      // Populate pollutant readings
+      const container = document.getElementById('pollutants-list');
+      container.innerHTML = '';
+
+      const standardPollutants = [
+        'AQI', 'PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 'O3', 'Benzene', 'Toluene', 'Xylene'
+      ];
+
+      // Order parameters: standard pollutants first, then any extra fields
+      const availableKeys = Object.keys(source).filter(k => 
+        k !== 'AQI_Bucket' && k !== 'error' && k !== 'lag_source' && k !== 'predictions'
+      );
+      const orderedKeys = standardPollutants.filter(k => availableKeys.includes(k))
+        .concat(availableKeys.filter(k => !standardPollutants.includes(k)));
+
+      orderedKeys.forEach(param => {
+        const val = source[param];
+        if (val !== undefined && val !== null) {
+          const item = document.createElement('div');
+          item.className = 'pollutant-item';
+
+          const label = document.createElement('span');
+          label.className = 'pollutant-name';
+          label.textContent = param + ':';
+
+          const value = document.createElement('span');
+          value.className = 'pollutant-value';
+          const num = Number(val);
+          value.textContent = !isNaN(num) ? num.toFixed(2) : String(val);
+
+          item.appendChild(label);
+          item.appendChild(value);
+          container.appendChild(item);
+        }
+      });
+
+      // Display metadata notes if present (e.g., lag source info)
+      const noteEl = document.getElementById('predict-note');
+      if (data.lag_source && Array.isArray(data.lag_source)) {
+        noteEl.textContent = 'Lag data sources used: ' + data.lag_source.join(', ');
+        noteEl.style.display = 'block';
+      } else {
+        noteEl.style.display = 'none';
+      }
+
+      predictResult.style.display = 'block';
+    }
+
+    // Visualization Form Submission Handler
+    const vizForm = document.getElementById('viz-form');
+    const vizBtn = document.getElementById('viz-btn');
+    const vizError = document.getElementById('viz-error');
+    const vizResult = document.getElementById('viz-result');
+
+    vizForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      vizError.style.display = 'none';
+      vizError.textContent = '';
+      vizBtn.disabled = true;
+      const originalText = vizBtn.textContent;
+      vizBtn.textContent = 'Generating Visualizations...';
+
+      try {
+        const data = await postFormData('/visualize', vizForm);
+        
+        if (data.pie_url) {
+          document.getElementById('pie-img').src = 'data:image/png;base64,' + data.pie_url;
+        }
+        if (data.bar_url) {
+          document.getElementById('bar-img').src = 'data:image/png;base64,' + data.bar_url;
+        }
+        if (data.line_url) {
+          document.getElementById('line-img').src = 'data:image/png;base64,' + data.line_url;
+        }
+
+        vizResult.style.display = 'block';
+      } catch (err) {
+        vizResult.style.display = 'none';
+        vizError.textContent = err.message || 'An unexpected error occurred during visualization.';
+        vizError.style.display = 'block';
+      } finally {
+        vizBtn.disabled = false;
+        vizBtn.textContent = originalText;
+      }
+    });
+  </script>
+</body>
+</html>

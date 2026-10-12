@@ -1,193 +1,154 @@
-import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import KFold
-from sklearn.metrics import r2_score
-import joblib
+"""
+Train multi-output regression for air-quality pollutants.
+
+Usage:
+    python train_model.py                          # Ridge, ~4% sample
+    python train_model.py --sample-frac 0.2        # Ridge, 20% sample
+    python train_model.py --model linearsvr        # scaled LinearSVR
+"""
+import argparse
+import json
+import logging
 import os
 import time
-import logging
-import json
-import numpy as np
 
-# Configure logging
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
+from sklearn.linear_model import Ridge
+from sklearn.metrics import r2_score
+from sklearn.model_selection import KFold
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.svm import LinearSVR
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('train_model.log'),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler('train_model.log'), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
-def load_data(file_path, dtype=None, sample_frac=None):
-    """Load a CSV file with optional sampling for large datasets."""
-    try:
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
-        df = pd.read_csv(file_path, dtype=dtype)
-        if sample_frac:
-            df = df.sample(frac=sample_frac, random_state=42)
-            logger.info(f"Sampled {sample_frac*100}% of data: {len(df)} rows")
-        logger.info(f"Successfully loaded {file_path} with {len(df)} rows")
-        return df
-    except Exception as e:
-        logger.error(f"Error loading {file_path}: {str(e)}")
-        raise
+DATA_PATH = os.path.join('data', 'station_hour_cleaned.csv')
+TARGETS = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2',
+           'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI']
+LAGS = [f'{t}_lag1' for t in TARGETS]
+TIME_FEATURES = ['Year', 'Month', 'Day', 'Hour']
+FEATURES = ['StationId'] + TIME_FEATURES + LAGS
 
-def validate_data(df, required_columns):
-    """Validate that the DataFrame has all required columns."""
-    missing_cols = [col for col in required_columns if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"Missing required columns: {missing_cols}")
-    logger.info("All required columns present")
+MODEL_FILES = {
+    'ridge':     ('Ridge',     'models/air_quality_model.pkl',     'models/accuracy_metrics.json'),
+    'linearsvr': ('LinearSVR', 'models/air_quality_model_svm.pkl', 'models/accuracy_metrics_svm.json'),
+}
 
-def preprocess_data(station_hour, targets):
-    """Preprocess the data: parse datetime, extract features, add lags, handle missing values."""
-    try:
-        if 'Datetime' not in station_hour.columns:
-            raise ValueError("Column 'Datetime' not found in station_hour data")
-        station_hour['Datetime'] = pd.to_datetime(station_hour['Datetime'], errors='coerce')
-        
-        if station_hour['Datetime'].isna().any():
-            logger.warning("Some Datetime values could not be parsed; filling with forward fill")
-            station_hour['Datetime'].fillna(method='ffill', inplace=True)
 
-        # Sort for lag features
-        station_hour = station_hour.sort_values(['StationId', 'Datetime'])
+def load_and_build_features(path):
+    """Load full data, build lag features on the COMPLETE sorted series."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found: {path}")
+    df = pd.read_csv(path, usecols=['StationId', 'Datetime'] + TARGETS, low_memory=False)
+    logger.info(f"Loaded {len(df):,} rows")
 
-        # Add lag features (previous hour)
-        for target in targets:
-            station_hour[f'{target}_lag1'] = station_hour.groupby('StationId')[target].shift(1)
-            station_hour[f'{target}_lag1'] = station_hour[f'{target}_lag1'].fillna(station_hour[target].mean())
+    df['Datetime'] = pd.to_datetime(df['Datetime'], errors='coerce')
+    bad = df['Datetime'].isna().sum()
+    if bad:
+        logger.warning(f"Dropping {bad} rows with unparseable Datetime")
+        df = df.dropna(subset=['Datetime'])
 
-        station_hour['Year'] = station_hour['Datetime'].dt.year
-        station_hour['Month'] = station_hour['Datetime'].dt.month
-        station_hour['Day'] = station_hour['Datetime'].dt.day
-        station_hour['Hour'] = station_hour['Datetime'].dt.hour
+    df = df.sort_values(['StationId', 'Datetime']).reset_index(drop=True)
 
-        data = station_hour.drop(['Datetime', 'AQI_Bucket'], axis=1, errors='ignore')
-        
-        numerics = data.select_dtypes(include=['float64', 'int64']).columns
-        if not numerics.empty:
-            for col in numerics:
-                median_val = data[col].median()
-                data[col] = data[col].fillna(median_val)
-                low, high = data[col].quantile([0.01, 0.99])
-                data[col] = data[col].clip(low, high)
-            logger.info("Filled missing numeric values with medians and clipped outliers")
-        else:
-            logger.warning("No numeric columns found for missing value imputation")
+    means = df[TARGETS].mean()
+    grouped = df.groupby('StationId')
+    for t in TARGETS:
+        df[f'{t}_lag1'] = grouped[t].shift(1).fillna(means[t])
 
-        logger.info(f"Processed data shape: {data.shape}")
-        logger.info(f"Sample data:\n{data.head().to_string()}")
-        return data
-    except Exception as e:
-        logger.error(f"Error in preprocessing data: {str(e)}")
-        raise
+    df['Year'] = df['Datetime'].dt.year
+    df['Month'] = df['Datetime'].dt.month
+    df['Day'] = df['Datetime'].dt.day
+    df['Hour'] = df['Datetime'].dt.hour
+    return df.drop(columns=['Datetime'])
 
-def train_and_save_model(data, features, targets, model_path, metrics_path):
-    """Train Ridge Regression with k-fold cross-validation, compute accuracy, and save."""
-    try:
-        if len(data) < 10:
-            raise ValueError("Dataset too small for training (less than 10 rows)")
 
-        X = data[features]
-        y = data[targets]
+def clean_numeric(data):
+    """Median-fill NaNs and clip targets/lags to the 1st-99th percentile. Returns bounds for lags."""
+    bounds = {}
+    for col in TARGETS + LAGS:
+        data[col] = data[col].fillna(data[col].median())
+        low, high = data[col].quantile([0.01, 0.99])
+        data[col] = data[col].clip(low, high)
+        if col in LAGS:
+            bounds[col] = [float(low), float(high)]
+    return data, bounds
 
-        # Preprocessing pipeline
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ('cat', OneHotEncoder(handle_unknown='ignore'), ['StationId'])
-            ],
-            remainder='passthrough'
+
+def build_model(kind):
+    cat = ('cat', OneHotEncoder(handle_unknown='ignore'), ['StationId'])
+    if kind == 'ridge':
+        pre = ColumnTransformer([cat], remainder='passthrough')
+        reg = Ridge(alpha=1.0)
+    else:
+        num = ('num', StandardScaler(), TIME_FEATURES + LAGS)
+        pre = ColumnTransformer([cat, num])
+        reg = MultiOutputRegressor(
+            TransformedTargetRegressor(
+                regressor=LinearSVR(epsilon=0.1, C=1.0, dual='auto', max_iter=5000, random_state=42),
+                transformer=StandardScaler(),
+            )
         )
+    return Pipeline([('preprocessor', pre), ('regressor', reg)])
 
-        # Model pipeline
-        model = Pipeline(steps=[
-            ('preprocessor', preprocessor),
-            ('regressor', Ridge(alpha=1.0))  # Default alpha, can tune later
-        ])
-
-        # K-fold cross-validation (5 folds)
-        kf = KFold(n_splits=5, shuffle=True, random_state=42)
-        r2_scores_per_fold = {target: [] for target in targets}
-        
-        logger.info("Starting k-fold cross-validation...")
-        start_time = time.time()
-        for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
-            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-            
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            
-            for i, target in enumerate(targets):
-                r2 = r2_score(y_test[target], y_pred[:, i])
-                r2_scores_per_fold[target].append(r2)
-            logger.info(f"Fold {fold+1} R² scores: { {k: v[-1] for k, v in r2_scores_per_fold.items()} }")
-        
-        # Compute mean R² scores across folds
-        r2_scores = {target: np.mean(scores) for target, scores in r2_scores_per_fold.items()}
-        logger.info(f"Mean R² scores across 5 folds: {r2_scores}")
-
-        # Train final model on full data
-        logger.info("Training final model on full data...")
-        model.fit(X, y)
-        end_time = time.time()
-        logger.info(f"Training completed in {end_time - start_time:.2f} seconds")
-
-        # Save the model
-        joblib.dump(model, model_path)
-        logger.info(f"Model saved successfully to {model_path}")
-
-        # Save accuracy metrics
-        with open(metrics_path, 'w') as f:
-            json.dump(r2_scores, f, indent=4)
-        logger.info(f"Accuracy metrics saved to {metrics_path}")
-
-    except Exception as e:
-        logger.error(f"Error in training or saving model: {str(e)}")
-        raise
 
 def main():
-    """Main function to orchestrate data loading, preprocessing, and model training."""
-    try:
-        os.makedirs('models', exist_ok=True)
-        model_path = 'models/air_quality_model.pkl'
-        metrics_path = 'models/accuracy_metrics.json'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', choices=list(MODEL_FILES), default='ridge')
+    parser.add_argument('--sample-frac', type=float, default=0.0386,
+                        help='fraction of rows used for training (1.0 = all)')
+    parser.add_argument('--folds', type=int, default=5)
+    args = parser.parse_args()
 
-        required_columns = [
-            'StationId', 'Datetime', 'PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 
-            'NH3', 'CO', 'SO2', 'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI'
-        ]
-        targets = ['PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 
-                   'O3', 'Benzene', 'Toluene', 'Xylene', 'AQI']
-        features = ['StationId', 'Year', 'Month', 'Day', 'Hour'] + [f'{t}_lag1' for t in targets]
+    name, model_path, metrics_path = MODEL_FILES[args.model]
+    os.makedirs('models', exist_ok=True)
 
-        logger.info("Loading data...")
-        stations = load_data('data/stations.csv')
-        station_hour = load_data('data/station_hour_cleaned.csv', 
-                               dtype={'AQI_Bucket': 'object'}, 
-                               sample_frac=0.0386)  # ~100,000 rows
-        # For full dataset, uncomment:
-        # station_hour = load_data('data/station_hour_cleaned.csv', 
-        #                        dtype={'AQI_Bucket': 'object'}, 
-        #                        sample_frac=1.0)
+    data = load_and_build_features(DATA_PATH)
+    if args.sample_frac < 1.0:
+        data = data.sample(frac=args.sample_frac, random_state=42)
+        logger.info(f"Sampled {len(data):,} rows ({args.sample_frac * 100:.2f}%)")
 
-        validate_data(station_hour, required_columns)
+    data, bounds = clean_numeric(data)
+    X, y = data[FEATURES], data[TARGETS]
 
-        logger.info("Preprocessing data...")
-        data = preprocess_data(station_hour, targets)
+    model = build_model(args.model)
+    kf = KFold(n_splits=args.folds, shuffle=True, random_state=42)
+    scores = {t: [] for t in TARGETS}
 
-        train_and_save_model(data, features, targets, model_path, metrics_path)
+    start = time.time()
+    for fold, (tr, te) in enumerate(kf.split(X), 1):
+        model.fit(X.iloc[tr], y.iloc[tr])
+        pred = model.predict(X.iloc[te])
+        for i, t in enumerate(TARGETS):
+            scores[t].append(r2_score(y.iloc[te][t], pred[:, i]))
+        logger.info(f"Fold {fold}/{args.folds} done ({time.time() - start:.0f}s)")
 
-    except Exception as e:
-        logger.error(f"Script failed: {str(e)}")
-        raise
+    mean_r2 = {t: float(np.mean(v)) for t, v in scores.items()}
+    logger.info(f"Mean R2: {mean_r2}")
+
+    logger.info("Fitting final model on all sampled rows...")
+    model.fit(X, y)
+    joblib.dump(model, model_path)
+    logger.info(f"Saved model -> {model_path}")
+
+    with open(metrics_path, 'w') as f:
+        json.dump({'model': name, 'n_rows': int(len(data)), 'cv_folds': args.folds,
+                   'sample_frac': args.sample_frac, 'r2': mean_r2}, f, indent=4)
+    logger.info(f"Saved metrics -> {metrics_path}")
+
+    if args.model == 'ridge':   # the app uses the Ridge model's bounds
+        with open('models/clip_bounds.json', 'w') as f:
+            json.dump(bounds, f, indent=2)
+        logger.info("Saved clip bounds -> models/clip_bounds.json")
+
 
 if __name__ == '__main__':
     main()
