@@ -1,0 +1,79 @@
+data <- read.csv("station_hour_cleaned.csv", stringsAsFactors = FALSE)
+
+# Convert Datetime to POSIXct
+data$Datetime <- ymd_hms(data$Datetime)
+
+# Remove missing values
+data <- na.omit(data)
+
+# Create a sample for faster plotting (50k rows max)
+set.seed(123)
+sampled_data <- data %>% sample_n(min(50000, nrow(data)))
+
+# Quick check
+head(sampled_data)
+
+model <- lm(PM2.5 ~ PM10 + NO2 + SO2 + O3, data = sampled_data)
+
+# Make predictions on the same sampled data
+sampled_data$Predicted_PM2.5 <- predict(model, newdata = sampled_data)
+
+# Check first few predictions
+head(sampled_data[, c("PM2.5", "Predicted_PM2.5")])
+
+
+ggplot(sampled_data, aes(x = PM2.5, y = Predicted_PM2.5)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Actual vs Predicted PM2.5",
+       x = "Actual PM2.5",
+       y = "Predicted PM2.5") +
+  theme_minimal()
+
+stations <- read.csv("stations.csv", stringsAsFactors = FALSE)
+head(stations)
+
+
+# Rename first column if needed
+colnames(data)[1] <- "StationId"
+
+# Join with stations to get City and State
+data <- data %>%
+  left_join(stations %>% select(StationId, City, State), by = "StationId")
+
+# Sample for plotting
+set.seed(123)
+sampled_data <- data %>% sample_n(min(50000, nrow(data)))
+
+avg_city <- sampled_data %>%
+  group_by(City) %>%
+  summarise(Avg_PM2.5 = mean(PM2.5, na.rm = TRUE)) %>%
+  arrange(desc(Avg_PM2.5)) %>%
+  head(10)
+
+#top 10 cities
+ggplot(avg_city, aes(x = reorder(City, Avg_PM2.5), y = Avg_PM2.5)) +
+  geom_col(fill = "tomato") +
+  coord_flip() +
+  labs(title = "Top 10 Cities by Average PM2.5",
+       x = "City", y = "Average PM2.5") +
+  theme_minimal()
+
+
+#Average Pollution Composition
+ggplot(pollution_df, aes(x = "", y = Mean_Value, fill = Pollutant)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(title = "Average Pollution Composition") +
+  theme_void()
+
+
+#boxplot
+ggplot(sampled_data, aes(x = State, y = PM2.5)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "PM2.5 Distribution by State", x = "State", y = "PM2.5") +
+  theme_minimal()
+
+
+
+
