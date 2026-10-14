@@ -36,6 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # ----------------------------------------------------------------------
 # Startup: load model + small cache files only (no 222 MB CSV)

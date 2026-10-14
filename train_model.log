@@ -120,15 +120,29 @@
 2026-10-12 22:59:02,749 - INFO - Loaded 2,589,083 rows
 2026-10-12 22:59:10,935 - INFO - Sampled 99,939 rows (3.86%)
 2026-10-12 23:08:49,249 - INFO - Fold 1/5 done (578s)
-2026-10-14 14:00:11,846 - INFO - Loaded 2,589,083 rows
-2026-10-14 14:00:18,872 - INFO - Sampled 99,939 rows (3.86%)
-2026-10-14 14:00:22,132 - INFO - Fold 1/5 done (3s)
-2026-10-14 14:00:25,260 - INFO - Fold 2/5 done (6s)
-2026-10-14 14:00:28,317 - INFO - Fold 3/5 done (9s)
-2026-10-14 14:00:30,748 - INFO - Fold 4/5 done (12s)
-2026-10-14 14:00:33,223 - INFO - Fold 5/5 done (14s)
-2026-10-14 14:00:33,224 - INFO - Mean R2: {'PM2.5': 0.8791176300588276, 'PM10': 0.8725317841825424, 'NO': 0.7537231666192705, 'NO2': 0.8499191574021093, 'NOx': 0.8029187392858009, 'NH3': 0.8605984700741525, 'CO': 0.7731254866001034, 'SO2': 0.750440898436095, 'O3': 0.8135075149484254, 'Benzene': 0.8178874788818703, 'Toluene': 0.8407595873007813, 'Xylene': 0.8223220367327023, 'AQI': 0.9578798490108204}
-2026-10-14 14:00:33,224 - INFO - Fitting final model on all sampled rows...
-2026-10-14 14:00:36,339 - INFO - Saved model -> models/air_quality_model.pkl
-2026-10-14 14:00:36,342 - INFO - Saved metrics -> models/accuracy_metrics.json
-2026-10-14 14:00:36,344 - INFO - Saved clip bounds -> models/clip_bounds.json
+2026-10-12 23:18:45,472 - INFO - Fold 2/5 done (1174s)
+2026-10-12 23:28:13,091 - INFO - Fold 3/5 done (1742s)
+2026-10-14 20:16:39,487 - INFO - Loaded 2,589,083 rows
+2026-10-14 20:16:51,438 - INFO - Sampled 99,939 rows (3.86%)
+2026-10-14 20:16:54,447 - INFO - Fold 1/5 done (3s)
+2026-10-14 20:16:57,880 - INFO - Fold 2/5 done (6s)
+2026-10-14 20:17:00,127 - INFO - Fold 3/5 done (8s)
+2026-10-14 20:17:02,330 - INFO - Fold 4/5 done (11s)
+2026-10-14 20:17:04,511 - INFO - Fold 5/5 done (13s)
+2026-10-14 20:17:04,511 - INFO - Mean R2: {'PM2.5': 0.879118231726777, 'PM10': 0.8725330723649616, 'NO': 0.75372452141876, 'NO2': 0.8499179407460543, 'NOx': 0.802918738528508, 'NH3': 0.8605985772101425, 'CO': 0.7731253564650084, 'SO2': 0.7504426563296309, 'O3': 0.813508188523685, 'Benzene': 0.8178874014073407, 'Toluene': 0.8407596613564129, 'Xylene': 0.8223227046865418, 'AQI': 0.9579293557604303}
+2026-10-14 20:17:04,511 - INFO - Fitting final model on all sampled rows...
+2026-10-14 20:17:07,160 - INFO - Saved model -> models/air_quality_model.pkl
+2026-10-14 20:17:07,245 - INFO - Saved metrics -> models/accuracy_metrics.json
+2026-10-14 20:17:07,245 - INFO - Saved clip bounds -> models/clip_bounds.json
+2026-10-14 20:50:37,693 - INFO - Loaded 2,589,083 rows
+2026-10-14 20:50:49,506 - INFO - Sampled 517,817 rows (20.00%)
+2026-10-14 20:51:05,002 - INFO - Fold 1/5 done (14s)
+2026-10-14 20:51:18,784 - INFO - Fold 2/5 done (28s)
+2026-10-14 20:51:32,375 - INFO - Fold 3/5 done (42s)
+2026-10-14 20:51:45,787 - INFO - Fold 4/5 done (55s)
+2026-10-14 20:51:59,174 - INFO - Fold 5/5 done (68s)
+2026-10-14 20:51:59,182 - INFO - Mean R2: {'PM2.5': 0.8763779637547715, 'PM10': 0.8661524901436939, 'NO': 0.7519106674446074, 'NO2': 0.8499979575533185, 'NOx': 0.7988163487079196, 'NH3': 0.865023499805581, 'CO': 0.7753387790143008, 'SO2': 0.7462576492640695, 'O3': 0.8129923456516945, 'Benzene': 0.8191821742567253, 'Toluene': 0.843425350037702, 'Xylene': 0.8189419083600511, 'AQI': 0.9585676025377413}
+2026-10-14 20:51:59,183 - INFO - Fitting final model on all sampled rows...
+2026-10-14 20:52:15,425 - INFO - Saved model -> models/air_quality_model.pkl
+2026-10-14 20:52:15,425 - INFO - Saved metrics -> models/accuracy_metrics.json
+2026-10-14 20:52:15,425 - INFO - Saved clip bounds -> models/clip_bounds.json

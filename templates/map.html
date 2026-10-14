@@ -54,6 +54,28 @@
     background: var(--green); flex-shrink: 0;
     box-shadow: 0 0 6px var(--green);
   }
+  /* Leaflet layer control dark theme */
+  .leaflet-control-layers {
+    background: rgba(10,15,30,.92) !important;
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,.12) !important;
+    border-radius: 10px !important;
+    color: #e2e8f0 !important;
+    padding: 8px 12px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.4) !important;
+    font-size: .82rem !important;
+  }
+  .leaflet-control-layers-toggle {
+    filter: invert(1);
+  }
+  .leaflet-control-layers label {
+    margin: 4px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #e2e8f0;
+  }
 </style>
 {% endblock %}
 
@@ -103,10 +125,29 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const map = L.map('map').setView([22.5, 79], 5);
-  L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4kdy_1_76b3c5536b7f6ae44e8e39a7', {
-    maxZoom: 14,
-    attribution: '© OpenStreetMap © CARTO'
-  }).addTo(map);
+
+  // Free high-quality base layers without API key requirements
+  const esriDarkBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16,
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+  });
+  const esriDarkLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16,
+    attribution: 'Labels &copy; Esri'
+  });
+  const esriDark = L.layerGroup([esriDarkBase, esriDarkLabels]).addTo(map);
+
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+  });
+
+  const baseMaps = {
+    "🌙 Dark Canvas (Esri)": esriDark,
+    "☀️ Standard (OpenStreetMap)": osm
+  };
+  L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+
   const group = L.layerGroup().addTo(map);
   const legend = L.control({ position: 'bottomright' });
   let legendEl;
