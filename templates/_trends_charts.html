@@ -1,0 +1,65 @@
+{#
+_trends_charts.html -- reusable partial for AQI Trends charts A, B, C, E.
+Set variable tc_prefix before including (e.g. empty string or "covid").
+#}
+
+<!-- Chart A -->
+<div class="chart-card">
+  <h2>📊 Median Window AQI Per Year (25 Mar – 31 May)</h2>
+  <p class="muted" style="font-size:.85rem">Median of city-average AQI across the fixed panel cities. 2020 lockdown dip
+    is visually highlighted.</p>
+  <div class="chart-container">
+    <canvas id="{% if tc_prefix %}{{ tc_prefix }}-{% endif %}chart-a-median-aqi"
+      aria-label="Median Window AQI Per Year Bar Chart" role="img"></canvas>
+  </div>
+  <div class="source-caption">
+    <strong>Source:</strong> Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified).<br>
+    <em>Values: 2020=89.4, 2021=114.9, 2022=138.5, 2023=108.7, 2024=111.0, 2025=103.2.</em>
+  </div>
+</div>
+
+<!-- Chart B -->
+<div class="chart-card">
+  <h2>📈 Percent Change vs. 2020 (with 95% Bootstrap CI)</h2>
+  <p class="muted" style="font-size:.85rem">Median of per-city percent change relative to 2020 lockdown levels with
+    5,000 resample bootstrap error bars.</p>
+  <div class="chart-container">
+    <canvas id="{% if tc_prefix %}{{ tc_prefix }}-{% endif %}chart-b-pct-change"
+      aria-label="Percent Change vs 2020 Bar Chart" role="img"></canvas>
+  </div>
+  <div class="source-caption">
+    <strong>Source:</strong> Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified).<br>
+    <em>Error bars show 95% bootstrap CI (5,000 resamples, seed 0). All paired Wilcoxon tests p &lt; 0.001.</em>
+  </div>
+</div>
+
+<!-- Chart C -->
+<div class="chart-card">
+  <h2>🎨 AQI Category Distribution per Year</h2>
+  <p class="muted" style="font-size:.85rem">Share of panel city-days falling into each CPCB air quality bucket during
+    the 25 Mar – 31 May window.</p>
+  <div class="chart-container">
+    <canvas id="{% if tc_prefix %}{{ tc_prefix }}-{% endif %}chart-c-category-shares"
+      aria-label="Category Shares per Year Stacked Bar Chart" role="img"></canvas>
+  </div>
+  <div class="source-caption">
+    <strong>Source:</strong> Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified).<br>
+    <em>CPCB categories: Good+Satisfactory (&le;100), Moderate (101-200), Poor (201-300), Very Poor+Severe
+      (&gt;300).</em>
+  </div>
+</div>
+
+<!-- Chart E -->
+<div class="chart-card">
+  <h2>⚖️ Pre-Window (Jan–Mar) vs. Window (Mar–May) AQI</h2>
+  <p class="muted" style="font-size:.85rem">Comparing early-year baseline (1 Jan – 24 Mar) against the lockdown-period
+    summer window (25 Mar – 31 May).</p>
+  <div class="chart-container">
+    <canvas id="{% if tc_prefix %}{{ tc_prefix }}-{% endif %}chart-e-pre-vs-window"
+      aria-label="Pre-Window vs Window Median AQI Bar Chart" role="img"></canvas>
+  </div>
+  <div class="source-caption">
+    <strong>Source:</strong> Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified).<br>
+    <em>Shows the stark 40.9 point drop during 2020 lockdown compared to subsequent years.</em>
+  </div>
+</div>

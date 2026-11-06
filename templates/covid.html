@@ -1,5 +1,108 @@
 {% extends "base.html" %}
 {% block title %}COVID-19 Lockdown Impact{% endblock %}
+
+{% block head %}
+<!-- Pinned Chart.js 4.4.3 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<!-- Shared AQI trends chart render functions -->
+<script src="{{ url_for('static', filename='js/trends_charts.js') }}?v=2"></script>
+<style>
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+  }
+  @media (max-width: 640px) {
+    .chart-grid { grid-template-columns: 1fr; }
+  }
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 320px;
+    margin-top: 14px;
+  }
+  .source-caption {
+    margin-top: 14px;
+    font-size: .8rem;
+    color: var(--text-muted);
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding-top: 10px;
+    line-height: 1.4;
+  }
+  .source-caption strong {
+    color: #93c5fd;
+  }
+  .extension-divider {
+    border: none;
+    border-top: 2px dashed rgba(255,255,255,.15);
+    margin: 40px 0 24px 0;
+  }
+  .source-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 14px 0 16px 0;
+  }
+  .source-badge {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: .85rem;
+    line-height: 1.4;
+  }
+  .source-badge-orig {
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: #cbd5e1;
+  }
+  .source-badge-ext {
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: #7dd3fc;
+  }
+  .ext-pill-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+    margin-bottom: 24px;
+  }
+  .ext-pill {
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .ext-pill .lbl {
+    font-size: .75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .ext-pill .val {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 4px;
+  }
+  .ext-pill .sub {
+    font-size: .78rem;
+    color: #38bdf8;
+    margin-top: 2px;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <section style="padding:32px 30px 24px">
@@ -7,7 +110,7 @@
     <div style="background:linear-gradient(135deg,#dc2626,#9333ea);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">🦠</div>
     <div>
       <h1 style="margin-bottom:2px">COVID-19 Lockdown Impact on Air Quality</h1>
-      <p class="muted">Lockdown window: 25 Mar – 31 May 2020 · Baseline: same dates 2017–2019 · Associations only – weather not controlled for</p>
+      <p class="muted">Lockdown window: 25 Mar – 31 May 2020 · Baseline: same dates 2017–2019 · Associations only – weather not controlled for. The original analysis uses data ending 1 July 2020; see the extension section below for 2021-2025.</p>
     </div>
   </div>
 
@@ -78,6 +181,82 @@
     </table>
   </div>
 </section>
+
+<!-- AQI Extension Section -->
+<hr class="extension-divider">
+
+{% if has_extension %}
+<section id="aqi-extension-section" style="padding-top:10px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+    <div style="background:linear-gradient(135deg,#0284c7,#2563eb);border-radius:12px;padding:10px;line-height:1;font-size:1.5rem">📈</div>
+    <div>
+      <h2 style="margin-bottom:2px">After the lockdown: 2020 vs 2021-2025 (AQI extension)</h2>
+      <p class="muted">Longitudinal extension tracking multi-year post-lockdown rebound trajectories (25 Mar – 31 May window).</p>
+    </div>
+  </div>
+
+  <div class="source-badges">
+    <div class="source-badge source-badge-orig">
+      Original analysis: CPCB 2015-2020, PM2.5/PM10/NO2/CO/O3, year-on-year tests, counterfactual and 2019 placebo
+    </div>
+    <div class="source-badge source-badge-ext">
+      Extension: daily AQI only, Kaggle krishnandansha/aqi-india-2020-to-2025-october, ends 31 Oct 2025, fixed panel of 58 cities
+    </div>
+  </div>
+
+  <!-- 4 Summary Cards from /api/aqi-trends -->
+  <div class="ext-pill-grid">
+    <div class="ext-pill">
+      <div class="lbl">2020 Median Window AQI</div>
+      <div class="val" id="covid-pill-aqi-2020">–</div>
+      <div class="sub">25 Mar – 31 May window</div>
+    </div>
+    <div class="ext-pill">
+      <div class="lbl">2025 Median Window AQI</div>
+      <div class="val" id="covid-pill-aqi-2025" style="color:#34d399">–</div>
+      <div class="sub">Latest recorded window</div>
+    </div>
+    <div class="ext-pill">
+      <div class="lbl">Largest YoY Rise vs 2020</div>
+      <div class="val" id="covid-pill-peak-rise" style="color:#f87171">–</div>
+      <div class="sub" id="covid-pill-peak-sub">Peak post-lockdown rebound</div>
+    </div>
+    <div class="ext-pill">
+      <div class="lbl">Fixed Panel Size</div>
+      <div class="val" id="covid-pill-panel-size">–</div>
+      <div class="sub">&ge;80% completeness 2020–2025</div>
+    </div>
+  </div>
+
+  <!-- Caveat box -->
+  <div class="warn" style="margin-top:12px; margin-bottom:16px">
+    <strong>⚠️ Caveat:</strong> This extension uses a different dataset and AQI calculation from the 2015-2020 analysis above, so the numbers are not directly comparable. 2022 had the highest window AQI (cause not analysed). Data end 31 Oct 2025.
+  </div>
+
+  <!-- Charts A, B, C, E -->
+  <div class="chart-grid">
+    {% set tc_prefix = 'covid' %}
+    {% include '_trends_charts.html' %}
+  </div>
+
+  <!-- Link to /trends for city-level Chart D -->
+  <div style="margin-top:20px; text-align:center; padding:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:10px">
+    <p style="margin:0; font-size:.92rem">
+      Looking for per-city trajectories across Delhi, Mumbai, Kolkata, Chennai, Bengaluru, Hyderabad, Lucknow, and Ahmedabad?
+      <a href="/trends" style="color:#38bdf8; text-decoration:underline; font-weight:600; margin-left:6px">
+        View City-Level Trends (Chart D) on the Trends Page &rarr;
+      </a>
+    </p>
+  </div>
+</section>
+{% else %}
+<section id="aqi-extension-unavailable" class="warn" style="margin-top:24px">
+  <p>Extension data not available</p>
+</section>
+{% endif %}
+<div id="aqi-extension-client-error" class="warn" style="display:none; margin-top:24px">
+  <p>Extension data not available</p>
+</div>
 
 {% endblock %}
 
@@ -159,6 +338,53 @@
       tr.append(td(p), dTd, p19Td, snTd);
       body.appendChild(tr);
     });
+  })();
+
+  // ── Load AQI Trends Extension Data for /covid ───────────────────────────────
+  (async function loadCovidExtension() {
+    const extSec = document.getElementById('aqi-extension-section');
+    if (!extSec) return;
+    try {
+      const resp = await fetch('/api/aqi-trends');
+      if (!resp.ok) throw new Error('Extension data request failed: ' + resp.status);
+      const data = await resp.json();
+
+      // Populate 4 summary cards
+      if (data.median_window_aqi) {
+        document.getElementById('covid-pill-aqi-2020').textContent = data.median_window_aqi['2020'] ?? '89.4';
+        document.getElementById('covid-pill-aqi-2025').textContent = data.median_window_aqi['2025'] ?? '103.2';
+      }
+      if (data.panel_size !== undefined) {
+        document.getElementById('covid-pill-panel-size').textContent = data.panel_size;
+      }
+
+      // Largest year-on-year rise vs 2020
+      if (data.pct_change_vs_2020) {
+        let maxYear = null;
+        let maxRise = -Infinity;
+        for (const [yr, stats] of Object.entries(data.pct_change_vs_2020)) {
+          if (stats.median_pct_change > maxRise) {
+            maxRise = stats.median_pct_change;
+            maxYear = yr;
+          }
+        }
+        if (maxYear !== null) {
+          document.getElementById('covid-pill-peak-rise').textContent = `${maxYear} (+${maxRise}%)`;
+          document.getElementById('covid-pill-peak-sub').textContent = `Peak rebound in ${maxYear}`;
+        }
+      }
+
+      // Render charts A, B, C, E with prefix 'covid'
+      renderChartA(data, 'covid-chart-a-median-aqi');
+      renderChartB(data, 'covid-chart-b-pct-change');
+      renderChartC(data, 'covid-chart-c-category-shares');
+      renderChartE(data, 'covid-chart-e-pre-vs-window');
+    } catch (err) {
+      console.warn('AQI extension failed to load:', err);
+      extSec.style.display = 'none';
+      const errBox = document.getElementById('aqi-extension-client-error');
+      if (errBox) errBox.style.display = 'block';
+    }
   })();
 </script>
 {% endblock %}

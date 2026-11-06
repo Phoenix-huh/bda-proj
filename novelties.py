@@ -10,7 +10,7 @@ from io import BytesIO
 import joblib
 import numpy as np
 import pandas as pd
-from flask import Blueprint, abort, jsonify, render_template, request, send_from_directory
+from flask import Blueprint, abort, jsonify, make_response, render_template, request, send_from_directory
 from matplotlib.figure import Figure
 
 import covid
@@ -292,10 +292,17 @@ def covid_page():
     cities = ['All cities'] + sorted(df['City'].astype(str).unique())
     buckets_path = p('results', 'covid_buckets.json')
     buckets = json.load(open(buckets_path)) if os.path.exists(buckets_path) else []
-    return render_template('covid.html', cities=cities, pollutants=covid.POLLUTANTS,
-                           summary=read_csv_records('covid_summary.csv'),
-                           counterfactual=read_csv_records('covid_counterfactual_summary.csv'),
-                           buckets=buckets)
+    aqi_trends_path = p('data', 'aqi_trends.json')
+    has_extension = os.path.exists(aqi_trends_path)
+    resp = make_response(render_template('covid.html', cities=cities, pollutants=covid.POLLUTANTS,
+                                         summary=read_csv_records('covid_summary.csv'),
+                                         counterfactual=read_csv_records('covid_counterfactual_summary.csv'),
+                                         buckets=buckets,
+                                         has_extension=has_extension))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @bp.route('/api/covid-chart')
@@ -376,3 +383,42 @@ def api_advisory():
         return jsonify({'error': 'aqi must be a number'}), 400
     pm25 = request.args.get('pm25')
     return jsonify(advisory_for(aqi, float(pm25) if pm25 else None))
+
+
+# ------------------------------------------------------------------ Trends & Current AQI
+@bp.route('/trends')
+def trends_page():
+    return render_template('trends.html')
+
+
+@bp.route('/api/trends')
+def api_trends():
+    from trends import get_trends_data
+    return jsonify(get_trends_data())
+
+
+@bp.route('/api/current')
+def api_current():
+    from services.current_aqi import get_current_aqi
+    city = request.args.get('city', 'Delhi')
+    data = get_current_aqi(city)
+    return jsonify(data)
+
+
+@bp.route('/api/aqi-trends')
+def api_aqi_trends():
+    trends_path = p('data', 'aqi_trends.json')
+    if not os.path.exists(trends_path):
+        resp = jsonify({'error': 'data/aqi_trends.json not found. Run scripts/build_aqi_trends.py first.'})
+        resp.status_code = 404
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
+    with open(trends_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    resp = jsonify(data)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+

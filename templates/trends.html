@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+{% block title %}Trends: 2020 vs Later Years{% endblock %}
+
+{% block head %}
+<!-- Pinned Chart.js 4.4.3 CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<!-- Shared AQI trends chart render functions -->
+<script src="{{ url_for('static', filename='js/trends_charts.js') }}?v=1"></script>
+<style>
+  .trends-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .trends-icon {
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    border-radius: 12px;
+    padding: 10px;
+    line-height: 1;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .chart-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 320px;
+    margin-top: 14px;
+  }
+
+  .source-caption {
+    margin-top: 14px;
+    font-size: .8rem;
+    color: var(--text-muted);
+    border-top: 1px solid rgba(255, 255, 255, .06);
+    padding-top: 10px;
+    line-height: 1.4;
+  }
+
+  .source-caption strong {
+    color: #93c5fd;
+  }
+
+  /* Key Metrics Pills */
+  .metrics-pill-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .metric-pill {
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+
+  .metric-pill .lbl {
+    font-size: .75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .metric-pill .val {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 3px;
+  }
+
+  .metric-pill .sub {
+    font-size: .75rem;
+    color: #38bdf8;
+    margin-top: 2px;
+  }
+
+  /* Current air quality panel */
+  .current-panel {
+    background: rgba(255, 255, 255, .03);
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-top: 14px;
+  }
+
+  .live-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .live-card {
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .07);
+    border-radius: 10px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+
+  .live-card .val {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 4px;
+  }
+
+  .live-card .lbl {
+    font-size: .75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .badge-aqi {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .badge-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    display: inline-block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header & Notice -->
+<section style="padding:28px 30px 22px">
+  <div class="trends-header">
+    <div class="trends-icon">📈</div>
+    <div>
+      <h1 style="margin-bottom:2px">Trends: 2020 vs Later Years</h1>
+      <p class="muted">Longitudinal AQI comparison across India: evaluating the 2020 COVID-19 lockdown window against
+        2021–2025 post-lockdown rebound trajectories using a fixed balanced panel of 58 cities.</p>
+    </div>
+  </div>
+
+  <div class="warn" style="margin-top:16px; margin-bottom:0">
+    <strong>⚠️ Methodological Notes & Caveats:</strong>
+    <p style="margin:8px 0 4px 0; font-size:.88rem">AQI only; 2025 data end 31 Oct 2025; fixed panel of 58 cities; 2022
+      window was the highest (cause not analysed); not comparable with the 2015-2020 results in /covid.</p>
+    <ul style="margin:6px 0 0 20px; font-size:.88rem; line-height:1.6">
+      <li><strong>AQI only:</strong> The post-2020 dataset reports daily Air Quality Index values per city; individual
+        gas concentrations are not present in this release.</li>
+      <li><strong>Data range:</strong> 1 Jan 2020 through 31 Oct 2025.</li>
+      <li><strong>Fixed panel of 58 cities:</strong> To eliminate geographic composition bias as the national monitoring
+        network expanded from ~139 cities (2020) to ~287 cities (2025), analysis is restricted to the 58 cities with
+        &ge;80% data completeness in the 25 Mar &ndash; 31 May window every single year.</li>
+      <li><strong>2022 window was the highest (cause not analysed):</strong> The 2022 lockdown window experienced the
+        highest median AQI (138.5, +58.5% over 2020).</li>
+      <li><strong>Not directly comparable:</strong> Sources use different station sets and are not directly comparable
+        with the 2020 lockdown results in <a href="/covid" style="color:#93c5fd;text-decoration:underline">/covid</a>.
+        In addition, these CPCB-derived AQI values are kept in a separate SQLite store (<code>daily_aqi</code>) and not
+        mixed with the 2015&ndash;2020 station-level gas models, as AQI calculation methodologies can differ.</li>
+    </ul>
+  </div>
+
+  <!-- Key Metrics Summary Pills -->
+  <div class="metrics-pill-grid" id="panel-pills">
+    <div class="metric-pill">
+      <div class="lbl">Fixed Panel Cities</div>
+      <div class="val" id="pill-panel-size">58</div>
+      <div class="sub">&ge;80% completeness 2020-2025</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">2020 Lockdown Median</div>
+      <div class="val" id="pill-aqi-2020">89.4</div>
+      <div class="sub">25 Mar – 31 May window</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">Peak Rebound (2022)</div>
+      <div class="val" id="pill-aqi-2022" style="color:#f87171">138.5</div>
+      <div class="sub">+58.5% vs 2020</div>
+    </div>
+    <div class="metric-pill">
+      <div class="lbl">Latest 2025 Window</div>
+      <div class="val" id="pill-aqi-2025" style="color:#34d399">103.2</div>
+      <div class="sub">+17.9% vs 2020</div>
+    </div>
+  </div>
+</section>
+
+<!-- Current Air Quality Panel -->
+<section>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px">
+    <div>
+      <h2>🍃 Current Air Quality</h2>
+      <p class="muted">Live near-real-time observations fetched on demand from the OpenAQ API.</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center">
+      <label style="margin:0; text-transform:none">
+        <select id="current-city-select" style="padding:6px 12px; font-size:.88rem">
+          <option value="Delhi" selected>Delhi</option>
+          <option value="Kolkata">Kolkata</option>
+          <option value="Mumbai">Mumbai</option>
+          <option value="Bengaluru">Bengaluru</option>
+          <option value="Chennai">Chennai</option>
+          <option value="Hyderabad">Hyderabad</option>
+          <option value="Ahmedabad">Ahmedabad</option>
+          <option value="Lucknow">Lucknow</option>
+          <option value="Patna">Patna</option>
+        </select>
+      </label>
+      <button id="btn-refresh-current" class="secondary" style="padding:7px 14px; font-size:.85rem">🔄 Fetch</button>
+    </div>
+  </div>
+
+  <div class="current-panel" id="current-panel-body">
+    <div id="current-loading" style="text-align:center; padding:18px; color:var(--text-muted)">
+      <span class="spinner"></span> Fetching current air quality...
+    </div>
+
+    <div id="current-content" style="display:none">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+        <div style="display:flex; align-items:center; gap:10px">
+          <span id="current-category-badge" class="badge-aqi">
+            <span class="badge-pulse"></span>
+            <span id="current-category-text">Moderate</span>
+          </span>
+          <span style="font-weight:600; font-size:1rem; color:var(--text)" id="current-city-name">Delhi</span>
+          <span class="muted" style="font-size:.82rem" id="current-station-name"></span>
+        </div>
+        <div class="muted" style="font-size:.8rem" id="current-timestamp"></div>
+      </div>
+
+      <div class="live-metrics-grid">
+        <div class="live-card">
+          <div class="lbl">PM2.5</div>
+          <div class="val" id="val-pm25">–</div>
+          <div class="muted" style="font-size:.7rem">µg/m³</div>
+        </div>
+        <div class="live-card">
+          <div class="lbl">PM10</div>
+          <div class="val" id="val-pm10">–</div>
+          <div class="muted" style="font-size:.7rem">µg/m³</div>
+        </div>
+        <div class="live-card">
+          <div class="lbl">NO2</div>
+          <div class="val" id="val-no2">–</div>
+          <div class="muted" style="font-size:.7rem">µg/m³</div>
+        </div>
+        <div class="live-card">
+          <div class="lbl">CPCB AQI</div>
+          <div class="val" id="val-aqi" style="color:#60a5fa">–</div>
+          <div class="muted" style="font-size:.7rem">Sub-index</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="current-unavailable"
+      style="display:none; text-align:center; padding:14px; color:#fca5a5; background:rgba(239,68,68,.08); border-radius:8px">
+      ⚠️ <span id="current-error-text">live data unavailable</span>
+    </div>
+
+    <div
+      style="margin-top:12px; font-size:.78rem; color:var(--text-muted); display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px">
+      <span>📌 <strong>Disclaimer:</strong> Live data is unvalidated and can differ from CPCB archives.</span>
+      <span>Source: OpenAQ API (cached 30 min)</span>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison Charts Grid -->
+<div class="chart-grid">
+  {% set tc_prefix = '' %}
+  {% include '_trends_charts.html' %}
+</div>
+
+<!-- Chart D: Major Cities Trajectories (Full Width) -->
+<section style="margin-top:24px">
+  <div
+    style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px">
+    <div>
+      <h2>🏙️ Major Cities Lockdown-Window Trajectories (2020–2025)</h2>
+      <p class="muted">Mean window AQI per year for named metropolitan centres in the fixed panel.</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px">
+      <label style="margin:0; text-transform:none">
+        <select id="named-city-selector" style="padding:6px 14px; font-size:.88rem">
+          <option value="ALL" selected>All 8 Named Cities</option>
+          <option value="Delhi">Delhi</option>
+          <option value="Mumbai">Mumbai</option>
+          <option value="Kolkata">Kolkata</option>
+          <option value="Chennai">Chennai</option>
+          <option value="Bengaluru">Bengaluru</option>
+          <option value="Hyderabad">Hyderabad</option>
+          <option value="Lucknow">Lucknow</option>
+          <option value="Ahmedabad">Ahmedabad</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="chart-card" style="padding:20px 24px">
+    <div class="chart-container" style="height:360px">
+      <canvas id="chart-d-named-cities" aria-label="Named Cities Window AQI Line Chart" role="img"></canvas>
+    </div>
+    <div class="source-caption">
+      <strong>Source:</strong> Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified).<br>
+      <em>Annual mean AQI for 25 Mar &ndash; 31 May. Delhi and Lucknow consistently register the highest pollution
+        levels.</em>
+    </div>
+  </div>
+</section>
+
+<!-- Statistical Summary Table -->
+<section style="margin-top:24px">
+  <h2>📋 Statistical Summary: 2021–2025 vs. 2020 Lockdown Baseline</h2>
+  <p class="muted" style="margin-bottom:14px">Paired statistical testing on the 58 fixed-panel cities (25 Mar – 31 May
+    window).</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th>Window Median AQI</th>
+          <th>Median % Change vs 2020</th>
+          <th>95% Bootstrap CI</th>
+          <th>Wilcoxon W Stat</th>
+          <th>Paired p-value (Two-Sided)</th>
+        </tr>
+      </thead>
+      <tbody id="stats-table-body"></tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let chartD = null;
+  let aqiTrendsData = null;
+
+  // ── Load AQI Trends from /api/aqi-trends ────────────────────────────────────
+  async function loadAQITrends() {
+    try {
+      const resp = await fetch('/api/aqi-trends');
+      if (!resp.ok) throw new Error('Failed to load aqi trends: ' + resp.status);
+      const data = await resp.json();
+      aqiTrendsData = data;
+
+      // Update pills
+      document.getElementById('pill-panel-size').textContent = data.panel_size;
+      document.getElementById('pill-aqi-2020').textContent = data.median_window_aqi['2020'];
+      document.getElementById('pill-aqi-2022').textContent = data.median_window_aqi['2022'];
+      document.getElementById('pill-aqi-2025').textContent = data.median_window_aqi['2025'];
+
+      renderChartA(data, 'chart-a-median-aqi');
+      renderChartB(data, 'chart-b-pct-change');
+      renderChartC(data, 'chart-c-category-shares');
+      renderChartE(data, 'chart-e-pre-vs-window');
+      renderChartD(data, 'ALL');
+      populateStatsTable(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // ── Chart D: Named Cities Trajectories (trends-page-only, has dropdown) ─────
+  const cityPalette = {
+    'Delhi': '#ef4444',
+    'Mumbai': '#3b82f6',
+    'Kolkata': '#10b981',
+    'Chennai': '#f59e0b',
+    'Bengaluru': '#8b5cf6',
+    'Hyderabad': '#06b6d4',
+    'Lucknow': '#ec4899',
+    'Ahmedabad': '#84cc16'
+  };
+
+  function renderChartD(data, selectedCity) {
+    const ctx = document.getElementById('chart-d-named-cities').getContext('2d');
+    const years = data.years.map(String);
+    const namedMeans = data.named_cities_window_means;
+
+    if (chartD) chartD.destroy();
+
+    const datasets = [];
+    const citiesToPlot = selectedCity === 'ALL' ? Object.keys(namedMeans) : [selectedCity];
+
+    citiesToPlot.forEach(city => {
+      const vals = years.map(y => namedMeans[city][y]);
+      const color = cityPalette[city] || '#38bdf8';
+      datasets.push({
+        label: city,
+        data: vals,
+        borderColor: color,
+        backgroundColor: color,
+        pointBackgroundColor: color,
+        pointRadius: 4.5,
+        pointHoverRadius: 7,
+        borderWidth: selectedCity === 'ALL' ? 2 : 3,
+        tension: 0.2
+      });
+    });
+
+    chartD = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: years,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: { color: '#e2e8f0', font: chartFont, boxWidth: 14 }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} AQI`
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: textColor, font: chartFont },
+            title: { display: true, text: 'Year', color: textColor, font: chartFont }
+          },
+          y: {
+            beginAtZero: true,
+            suggestedMax: 260,
+            grid: { color: gridColor },
+            ticks: { color: textColor, font: chartFont },
+            title: { display: true, text: 'Mean Window AQI (Index)', color: textColor, font: chartFont }
+          }
+        }
+      }
+    });
+  }
+
+  // 6. Statistical Summary Table
+  function populateStatsTable(data) {
+    const tbody = document.getElementById('stats-table-body');
+    tbody.innerHTML = '';
+
+    // 2020 base row
+    const tr2020 = document.createElement('tr');
+    tr2020.innerHTML = `
+      <td style="font-weight:700; color:#38bdf8">2020 (Lockdown)</td>
+      <td style="font-weight:700">${data.median_window_aqi['2020']}</td>
+      <td>0.0% (Reference)</td>
+      <td>–</td>
+      <td>–</td>
+      <td>–</td>
+    `;
+    tbody.appendChild(tr2020);
+
+    ['2021', '2022', '2023', '2024', '2025'].forEach(y => {
+      const item = data.pct_change_vs_2020[y];
+      const aqiVal = data.median_window_aqi[y];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight:600">${y}</td>
+        <td style="font-weight:600">${aqiVal}</td>
+        <td style="color:#f87171; font-weight:700">+${item.median_pct_change}%</td>
+        <td>[+${item.ci_low}%, +${item.ci_high}%]</td>
+        <td>${item.wilcoxon_stat}</td>
+        <td style="color:#6ee7b7">${item.wilcoxon_p.toExponential(3)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Named city dropdown listener
+  document.getElementById('named-city-selector').addEventListener('change', (e) => {
+    if (aqiTrendsData) {
+      renderChartD(aqiTrendsData, e.target.value);
+    }
+  });
+
+  // ── Fetch Current Air Quality ────────────────────────────────────────────────
+  async function fetchCurrentAQI(city) {
+    const loadingEl = document.getElementById('current-loading');
+    const contentEl = document.getElementById('current-content');
+    const unavailEl = document.getElementById('current-unavailable');
+
+    loadingEl.style.display = 'block';
+    contentEl.style.display = 'none';
+    unavailEl.style.display = 'none';
+
+    try {
+      const resp = await fetch(`/api/current?city=${encodeURIComponent(city || 'Delhi')}`);
+      const data = await resp.json();
+
+      loadingEl.style.display = 'none';
+      if (data && data.available) {
+        contentEl.style.display = 'block';
+        document.getElementById('current-city-name').textContent = data.city;
+        document.getElementById('current-station-name').textContent = data.station_name ? `(${data.station_name})` : '';
+
+        const badge = document.getElementById('current-category-badge');
+        badge.style.backgroundColor = data.color || '#94a3b8';
+        document.getElementById('current-category-text').textContent = data.category || 'Unknown';
+
+        document.getElementById('val-pm25').textContent = (data.pm25 !== null && data.pm25 !== undefined) ? data.pm25 : '–';
+        document.getElementById('val-pm10').textContent = (data.pm10 !== null && data.pm10 !== undefined) ? data.pm10 : '–';
+        document.getElementById('val-no2').textContent = (data.no2 !== null && data.no2 !== undefined) ? data.no2 : '–';
+        document.getElementById('val-aqi').textContent = (data.aqi !== null && data.aqi !== undefined) ? data.aqi : '–';
+
+        let tsText = data.timestamp ? `Updated: ${data.timestamp}` : 'Just now';
+        document.getElementById('current-timestamp').textContent = tsText;
+      } else {
+        unavailEl.style.display = 'block';
+        document.getElementById('current-error-text').textContent = (data && data.error) ? data.error : 'live data unavailable';
+      }
+    } catch (err) {
+      loadingEl.style.display = 'none';
+      unavailEl.style.display = 'block';
+      document.getElementById('current-error-text').textContent = 'live data unavailable';
+    }
+  }
+
+  // Event Listeners for current AQI
+  document.getElementById('btn-refresh-current').addEventListener('click', () => {
+    const city = document.getElementById('current-city-select').value;
+    fetchCurrentAQI(city);
+  });
+
+  document.getElementById('current-city-select').addEventListener('change', (e) => {
+    fetchCurrentAQI(e.target.value);
+  });
+
+  // Init
+  document.addEventListener('DOMContentLoaded', () => {
+    loadAQITrends();
+    fetchCurrentAQI('Delhi');
+  });
+</script>
+{% endblock %}

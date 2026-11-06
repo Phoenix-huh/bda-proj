@@ -146,3 +146,27 @@
 2026-10-14 20:52:15,425 - INFO - Saved model -> models/air_quality_model.pkl
 2026-10-14 20:52:15,425 - INFO - Saved metrics -> models/accuracy_metrics.json
 2026-10-14 20:52:15,425 - INFO - Saved clip bounds -> models/clip_bounds.json
+2026-11-06 09:06:08,550 - INFO - Loaded 2,589,083 rows
+2026-11-06 09:06:15,809 - INFO - Sampled 99,939 rows (3.86%)
+2026-11-06 09:06:19,291 - INFO - Fold 1/5 done (3s)
+2026-11-06 09:06:22,167 - INFO - Fold 2/5 done (6s)
+2026-11-06 09:06:24,865 - INFO - Fold 3/5 done (9s)
+2026-11-06 09:06:27,511 - INFO - Fold 4/5 done (11s)
+2026-11-06 09:06:30,428 - INFO - Fold 5/5 done (14s)
+2026-11-06 09:06:30,429 - INFO - Mean R2: {'PM2.5': 0.8791213149559219, 'PM10': 0.8725323407401213, 'NO': 0.753724035262632, 'NO2': 0.8499183880401192, 'NOx': 0.8029187368461921, 'NH3': 0.8600695398966784, 'CO': 0.7731255446394254, 'SO2': 0.7504420336167559, 'O3': 0.8135080677788933, 'Benzene': 0.8178872816708868, 'Toluene': 0.8407594705668491, 'Xylene': 0.822282180971661, 'AQI': 0.9594129375388258}
+2026-11-06 09:06:30,430 - INFO - Fitting final model on all sampled rows...
+2026-11-06 09:06:33,826 - INFO - Saved model -> models/air_quality_model.pkl
+2026-11-06 09:06:33,828 - INFO - Saved metrics -> models/accuracy_metrics.json
+2026-11-06 09:06:33,830 - INFO - Saved clip bounds -> models/clip_bounds.json
+2026-11-06 10:07:02,828 - INFO - Loaded 2,589,083 rows
+2026-11-06 10:07:23,082 - INFO - Sampled 99,939 rows (3.86%)
+2026-11-06 10:07:29,768 - INFO - Fold 1/5 done (6s)
+2026-11-06 10:07:34,833 - INFO - Fold 2/5 done (11s)
+2026-11-06 10:07:40,325 - INFO - Fold 3/5 done (17s)
+2026-11-06 10:07:45,446 - INFO - Fold 4/5 done (22s)
+2026-11-06 10:07:51,066 - INFO - Fold 5/5 done (28s)
+2026-11-06 10:07:51,068 - INFO - Mean R2: {'PM2.5': 0.8791176300588276, 'PM10': 0.8725317841825424, 'NO': 0.7537231666192705, 'NO2': 0.8499191574021093, 'NOx': 0.8029187392858009, 'NH3': 0.8605984700741525, 'CO': 0.7731254866001034, 'SO2': 0.750440898436095, 'O3': 0.8135075149484254, 'Benzene': 0.8178874788818703, 'Toluene': 0.8407595873007813, 'Xylene': 0.8223220367327023, 'AQI': 0.9578798490108204}
+2026-11-06 10:07:51,068 - INFO - Fitting final model on all sampled rows...
+2026-11-06 10:07:58,171 - INFO - Saved model -> models/air_quality_model.pkl
+2026-11-06 10:07:58,175 - INFO - Saved metrics -> models/accuracy_metrics.json
+2026-11-06 10:07:58,182 - INFO - Saved clip bounds -> models/clip_bounds.json

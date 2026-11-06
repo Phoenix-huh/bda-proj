@@ -1,0 +1,275 @@
+{
+  "source": "Kaggle krishnandansha/aqi-india-2020-to-2025-october (CPCB-derived, unverified)",
+  "note": "AQI only; 2025 data end 31 Oct 2025; fixed panel of 58 cities; 2022 window was the highest (cause not analysed); not comparable with the 2015-2020 results in /covid.",
+  "database_table": "daily_aqi (cache/daily_aqi.db)",
+  "window_description": "25 Mar to 31 May (68 days)",
+  "pre_window_description": "1 Jan to 24 Mar",
+  "panel_size": 58,
+  "panel_cities": [
+    "Ahmedabad",
+    "Aizawl",
+    "Ajmer",
+    "Alwar",
+    "Amaravati",
+    "Amritsar",
+    "Bengaluru",
+    "Bhiwadi",
+    "Bhopal",
+    "Bulandshahr",
+    "Chandigarh",
+    "Chandrapur",
+    "Chennai",
+    "Chikkaballapur",
+    "Delhi",
+    "Dewas",
+    "Gandhinagar",
+    "Gaya",
+    "Ghaziabad",
+    "Greater Noida",
+    "Gurugram",
+    "Guwahati",
+    "Gwalior",
+    "Hapur",
+    "Howrah",
+    "Hyderabad",
+    "Indore",
+    "Jabalpur",
+    "Jaipur",
+    "Jalandhar",
+    "Jodhpur",
+    "Kanpur",
+    "Katni",
+    "Khanna",
+    "Kolkata",
+    "Kota",
+    "Lucknow",
+    "Ludhiana",
+    "Mandideep",
+    "Meerut",
+    "Mumbai",
+    "Muzaffarnagar",
+    "Muzaffarpur",
+    "Navi Mumbai",
+    "Noida",
+    "Pali",
+    "Patiala",
+    "Patna",
+    "Pithampur",
+    "Pune",
+    "Rajamahendravaram",
+    "Siliguri",
+    "Singrauli",
+    "Thiruvananthapuram",
+    "Udaipur",
+    "Varanasi",
+    "Vatva",
+    "Visakhapatnam"
+  ],
+  "years": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "median_window_aqi": {
+    "2020": 89.4,
+    "2021": 114.93,
+    "2022": 138.54,
+    "2023": 108.71,
+    "2024": 110.95,
+    "2025": 103.17
+  },
+  "pre_window_median_aqi": {
+    "2020": 130.31,
+    "2021": 155.19,
+    "2022": 142.49,
+    "2023": 150.4,
+    "2024": 135.81,
+    "2025": 130.18
+  },
+  "pct_change_vs_2020": {
+    "2021": {
+      "median_pct_change": 31.86,
+      "ci_low": 21.29,
+      "ci_high": 42.83,
+      "wilcoxon_stat": 23.0,
+      "wilcoxon_p": 1.1521635456187852e-10
+    },
+    "2022": {
+      "median_pct_change": 58.5,
+      "ci_low": 46.67,
+      "ci_high": 78.22,
+      "wilcoxon_stat": 48.0,
+      "wilcoxon_p": 4.053695617109661e-10
+    },
+    "2023": {
+      "median_pct_change": 26.42,
+      "ci_low": 18.83,
+      "ci_high": 42.56,
+      "wilcoxon_stat": 232.0,
+      "wilcoxon_p": 1.383590719938889e-06
+    },
+    "2024": {
+      "median_pct_change": 30.48,
+      "ci_low": 21.61,
+      "ci_high": 47.77,
+      "wilcoxon_stat": 217.0,
+      "wilcoxon_p": 7.673660631611846e-07
+    },
+    "2025": {
+      "median_pct_change": 17.93,
+      "ci_low": 12.09,
+      "ci_high": 32.78,
+      "wilcoxon_stat": 327.0,
+      "wilcoxon_p": 4.27980674786918e-05
+    }
+  },
+  "category_shares": {
+    "2020": {
+      "total_city_days": 3799,
+      "good_satisfactory_pct": 67.4,
+      "moderate_pct": 29.7,
+      "poor_pct": 2.8,
+      "very_poor_severe_pct": 0.1,
+      "counts": {
+        "good_satisfactory": 2560,
+        "moderate": 1129,
+        "poor": 105,
+        "very_poor_severe": 5
+      }
+    },
+    "2021": {
+      "total_city_days": 3849,
+      "good_satisfactory_pct": 47.3,
+      "moderate_pct": 40.3,
+      "poor_pct": 10.7,
+      "very_poor_severe_pct": 1.8,
+      "counts": {
+        "good_satisfactory": 1819,
+        "moderate": 1551,
+        "poor": 410,
+        "very_poor_severe": 69
+      }
+    },
+    "2022": {
+      "total_city_days": 3852,
+      "good_satisfactory_pct": 29.6,
+      "moderate_pct": 50.2,
+      "poor_pct": 16.4,
+      "very_poor_severe_pct": 3.9,
+      "counts": {
+        "good_satisfactory": 1140,
+        "moderate": 1932,
+        "poor": 630,
+        "very_poor_severe": 150
+      }
+    },
+    "2023": {
+      "total_city_days": 3853,
+      "good_satisfactory_pct": 48.9,
+      "moderate_pct": 43.3,
+      "poor_pct": 7.4,
+      "very_poor_severe_pct": 0.4,
+      "counts": {
+        "good_satisfactory": 1886,
+        "moderate": 1667,
+        "poor": 284,
+        "very_poor_severe": 16
+      }
+    },
+    "2024": {
+      "total_city_days": 3872,
+      "good_satisfactory_pct": 45.0,
+      "moderate_pct": 46.2,
+      "poor_pct": 8.1,
+      "very_poor_severe_pct": 0.6,
+      "counts": {
+        "good_satisfactory": 1743,
+        "moderate": 1789,
+        "poor": 315,
+        "very_poor_severe": 25
+      }
+    },
+    "2025": {
+      "total_city_days": 3846,
+      "good_satisfactory_pct": 51.9,
+      "moderate_pct": 43.2,
+      "poor_pct": 4.6,
+      "very_poor_severe_pct": 0.3,
+      "counts": {
+        "good_satisfactory": 1997,
+        "moderate": 1663,
+        "poor": 176,
+        "very_poor_severe": 10
+      }
+    }
+  },
+  "named_cities_window_means": {
+    "Delhi": {
+      "2020": 121.2,
+      "2021": 175.3,
+      "2022": 234.6,
+      "2023": 171.4,
+      "2024": 200.6,
+      "2025": 190.4
+    },
+    "Mumbai": {
+      "2020": 63.1,
+      "2021": 91.0,
+      "2022": 114.9,
+      "2023": 93.4,
+      "2024": 89.4,
+      "2025": 75.0
+    },
+    "Kolkata": {
+      "2020": 62.1,
+      "2021": 87.6,
+      "2022": 72.7,
+      "2023": 78.5,
+      "2024": 77.1,
+      "2025": 64.0
+    },
+    "Chennai": {
+      "2020": 53.2,
+      "2021": 61.2,
+      "2022": 55.8,
+      "2023": 68.4,
+      "2024": 63.4,
+      "2025": 61.9
+    },
+    "Bengaluru": {
+      "2020": 58.1,
+      "2021": 71.4,
+      "2022": 82.1,
+      "2023": 70.5,
+      "2024": 75.3,
+      "2025": 74.9
+    },
+    "Hyderabad": {
+      "2020": 69.1,
+      "2021": 88.1,
+      "2022": 103.7,
+      "2023": 85.5,
+      "2024": 80.5,
+      "2025": 78.6
+    },
+    "Lucknow": {
+      "2020": 106.9,
+      "2021": 142.9,
+      "2022": 169.2,
+      "2023": 121.1,
+      "2024": 140.4,
+      "2025": 132.4
+    },
+    "Ahmedabad": {
+      "2020": 129.4,
+      "2021": 140.9,
+      "2022": 143.6,
+      "2023": 112.7,
+      "2024": 126.2,
+      "2025": 110.5
+    }
+  }
+}
